@@ -159,7 +159,7 @@ npm run build
 npm start
 ```
 
-A suíte da CLI usa `npm test` na raiz. Para validar a suíte completa, prepare um perfil descartável, Bun disponível e um ambiente que permita sockets Unix. Há testes que resolvem caminhos via `os.homedir()`, inclusive um que chama `cleanOldBackups()` no diretório de backup resolvido. Isole esse diretório antes de rodar a suíte sem as restrições do sandbox.
+A suíte da CLI usa `npm test` na raiz. Para validar a suíte completa com cobertura, use `bun run test:coverage`, um perfil descartável com caminho curto, como uma pasta criada com `mktemp -d /tmp/dm.XXXXXX`, e um ambiente que permita sockets Unix. Alguns testes usam `os.homedir()` e as verificações de formatação dependem de um caminho que caiba sem truncamento. Os testes de backup também isolam a própria pasta pessoal.
 
 Os testes de integração abaixo precisam de macOS. Alguns iniciam o Electron ou consultam processos do sistema. Use os dados e processos temporários criados pelos próprios testes.
 
@@ -183,6 +183,7 @@ npm run test:backups
 
 ### Evidências das entregas anteriores
 
+- **Cobertura da CLI.** Os 493 testes passaram com Node 22 e 24 e as dependências do lockfile. O menor resultado entre as duas versões foi 92,86% de linhas, 92,04% de funções, 92,13% de instruções e 85,80% de ramificações. Os testes novos exercitam inventário e remoção via Homebrew e restauração com conflitos, links e cópias entre volumes.
 - **Cadência do monitor.** O Electron recebeu dez leituras reais do painel compacto, com mediana de **502 ms** entre amostras e duas novas listas de processos. Fechar o painel com o valor oculto pausou a coleta. A medição foi uma amostra curta neste Mac.
 - **CPU, GPU e processos.** Um processo temporário marcou 100,1% ao ocupar um núcleo e 0% em repouso. O painel recebeu leituras reais da GPU. Processos temporários confirmaram `SIGTERM` e `SIGKILL` solicitado explicitamente após um processo ignorar `SIGTERM`.
 - **Interface.** A janela principal e o painel compacto foram verificados com o renderer compilado e amostras simuladas. A verificação de seleção, cancelamento e bloqueio de ações de processo incluiu o tamanho mínimo de 860 × 620. A automação da interface nativa permanece sem uma validação abrangente.
