@@ -13,8 +13,8 @@ const canNotarize = Boolean(
 
 /** @type {import('electron-builder').Configuration} */
 module.exports = {
-  appId: 'io.github.guhcostan.maccleaner',
-  productName: 'Mac Cleaner',
+  appId: 'io.github.guhcostan.diskmac',
+  productName: 'Disk Mac',
   copyright: 'Copyright © guhcostan',
   directories: {
     output: 'release',
@@ -31,8 +31,8 @@ module.exports = {
     ],
     minimumSystemVersion: '12.0',
     extendInfo: {
-      // Menu bar only: no Dock icon, no app menu.
-      LSUIElement: true,
+      // Keep the Dock and app menu visible for the full desktop window.
+      LSUIElement: false,
     },
     identity: hasCertificate ? undefined : '-',
     hardenedRuntime: hasCertificate,
@@ -41,11 +41,11 @@ module.exports = {
     entitlementsInherit: 'build/entitlements.mac.plist',
     notarize: canNotarize,
     // Used by the zip target (the dmg target sets its own name below).
-    artifactName: 'Mac-Cleaner-${version}-${arch}-mac.${ext}',
+    artifactName: 'Disk-Mac-${version}-${arch}-mac.${ext}',
   },
   dmg: {
-    title: 'Mac Cleaner ${version}',
-    artifactName: 'Mac-Cleaner-${version}-${arch}.dmg',
+    title: 'Disk Mac ${version}',
+    artifactName: 'Disk-Mac-${version}-${arch}.dmg',
   },
   publish: null,
 };

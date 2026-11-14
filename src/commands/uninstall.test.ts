@@ -47,7 +47,7 @@ vi.mock('fs/promises', async (importOriginal) => {
   };
 });
 
-import { uninstallCommand } from './uninstall.js';
+import { uninstallCommand, uninstallApplication } from './uninstall.js';
 import * as utils from '../utils/index.js';
 import * as inquirerConfirm from '@inquirer/confirm';
 import * as inquirerCheckbox from '@inquirer/checkbox';
@@ -257,5 +257,59 @@ describe('uninstall command', () => {
     await uninstallCommand({});
 
     consoleSpy.mockRestore();
+  });
+});
+
+describe('desktop uninstallation results', () => {
+  const appPath = '/Applications/Fixture.app';
+  const supportPath = join(process.env.HOME!, 'Library', 'Application Support', 'Fixture');
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(utils.exists).mockImplementation(async (path) => path === '/Applications' || path === supportPath);
+    vi.mocked(utils.getSize).mockImplementation(async (path) => path === appPath ? 200 : 50);
+    vi.mocked(utils.isProtectedPath).mockReturnValue(false);
+    vi.mocked(utils.validatePathSafety).mockReturnValue(null);
+    vi.mocked(fsPromises.readdir).mockResolvedValue(['Fixture.app'] as unknown as Awaited<ReturnType<typeof fsPromises.readdir>>);
+    vi.mocked(fsPromises.stat).mockResolvedValue({ isDirectory: () => true } as Awaited<ReturnType<typeof fsPromises.stat>>);
+    vi.mocked(fsPromises.lstat).mockResolvedValue({ isSymbolicLink: () => false } as Awaited<ReturnType<typeof fsPromises.lstat>>);
+    vi.mocked(fsPromises.readFile).mockResolvedValue(Buffer.from('<key>CFBundleIdentifier</key><string>local.diskmac.fixture</string>'));
+    vi.mocked(fsPromises.rm).mockResolvedValue(undefined);
+  });
+
+  it('keeps related data when the app bundle cannot be removed', async () => {
+    vi.mocked(fsPromises.rm).mockRejectedValue(Object.assign(new Error('not empty'), { code: 'ENOTEMPTY' }));
+    const result = await uninstallApplication(appPath);
+    expect(result).toMatchObject({ success: false, removedItems: 0, freedSpace: 0 });
+    expect(result.errors[0]).toContain('Não foi possível remover o aplicativo (ENOTEMPTY)');
+    expect(fsPromises.rm).toHaveBeenCalledTimes(1);
+    expect(fsPromises.rm).toHaveBeenCalledWith(appPath, expect.objectContaining({ recursive: true, maxRetries: 3 }));
+  });
+
+  it('reports partial removal without counting support files that remain', async () => {
+    vi.mocked(fsPromises.rm).mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(Object.assign(new Error('denied'), { code: 'EACCES' }));
+    const result = await uninstallApplication(appPath);
+    expect(result).toMatchObject({ success: false, removedItems: 1, freedSpace: 200 });
+    expect(result.errors[0]).toContain('EACCES');
+    expect(result.errors[0]).toContain('Verifique as permissões');
+  });
+
+  it('tolerates a related file disappearing between the inventory and removal', async () => {
+    let supportReads = 0;
+    vi.mocked(fsPromises.lstat).mockImplementation(async (path) => {
+      if (path === supportPath && ++supportReads === 2) throw Object.assign(new Error('gone'), { code: 'ENOENT' });
+      return { isSymbolicLink: () => false } as Awaited<ReturnType<typeof fsPromises.lstat>>;
+    });
+    expect(await uninstallApplication(appPath)).toMatchObject({ success: true, errors: [] });
+    expect(fsPromises.rm).toHaveBeenCalledTimes(1);
+  });
+
+  it('still refuses a path rejected by the safety check', async () => {
+    vi.mocked(utils.validatePathSafety).mockReturnValue('Protected fixture path');
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect(await uninstallApplication(appPath)).toMatchObject({ success: false, removedItems: 0 });
+    expect(fsPromises.rm).not.toHaveBeenCalled();
+    log.mockRestore();
   });
 });

@@ -24,6 +24,12 @@ const common = {
 await Promise.all([
   build({
     ...common,
+    entryPoints: [join(root, 'src/main/disk-analysis-worker.ts')],
+    outfile: join(dist, 'disk-analysis-worker.cjs'),
+    platform: 'node', format: 'cjs', target: 'node22',
+  }),
+  build({
+    ...common,
     entryPoints: [join(root, 'src/main/main.ts')],
     outfile: join(dist, 'main.cjs'),
     platform: 'node',
@@ -42,6 +48,12 @@ await Promise.all([
   }),
   build({
     ...common,
+    entryPoints: [join(root, 'src/renderer/monitor.ts')],
+    outfile: join(dist, 'renderer/monitor.js'),
+    platform: 'browser', format: 'iife', target: 'chrome130',
+  }),
+  build({
+    ...common,
     entryPoints: [join(root, 'src/renderer/app.ts')],
     outfile: join(dist, 'renderer/app.js'),
     platform: 'browser',
@@ -53,3 +65,5 @@ await Promise.all([
 await cp(join(root, 'src/renderer/index.html'), join(dist, 'renderer/index.html'));
 await cp(join(root, 'src/renderer/styles.css'), join(dist, 'renderer/styles.css'));
 await cp(join(root, 'src/renderer/logo.png'), join(dist, 'renderer/logo.png'));
+
+await cp(join(root, 'src/renderer/monitor.html'), join(dist, 'renderer/monitor.html'));

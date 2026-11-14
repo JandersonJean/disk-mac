@@ -149,6 +149,11 @@ async function shoot(file, { scheme, views, captions = false, width = 1200, heig
       revealPath: async () => {},
       quit: async () => {},
       onStateChanged: () => () => {},
+      getSystemSnapshot: async () => null,
+      setSystemMonitorVisible: async () => {},
+      openSystemMonitor: async () => {},
+      onSystemSnapshot: () => () => {},
+      onNavigateToActivity: () => () => {},
     };
   }, { state, preview });
 

@@ -1,4 +1,4 @@
-import { CATEGORIES, type CategoryId, type ScanResult } from '../../../src/types.js';
+import { CATEGORIES, type CategoryId, type ScanResult, type ScannerOptions } from '../../../src/types.js';
 import type {
   AppState,
   CategoryInfo,
@@ -42,6 +42,7 @@ export interface ControllerDeps {
   now?: () => Date;
   getDisk?: () => Promise<DiskInfo | null>;
   getFullDiskAccess?: () => Promise<boolean | null>;
+  getScanOptions?: () => Promise<ScannerOptions>;
   onStateChanged?: (state: AppState) => void;
   onRunFinished?: (record: RunRecord) => void;
   onSettingsChanged?: (state: AppState) => void;
@@ -84,6 +85,7 @@ export class CleanerController {
       disk,
       fullDiskAccess,
       categories: CATEGORY_LIST,
+      activity: null,
     };
   }
 
@@ -117,8 +119,9 @@ export class CleanerController {
 
   async scanDeep(categoryIds: CategoryId[]): Promise<DeepScanPreview> {
     const ids = this.validIds(categoryIds);
+    const scanOptions = await this.deps.getScanOptions?.();
     const results = await this.exclusive('deep', () =>
-      scanCategories(this.deps.registry, ids, (e) => this.setProgress('deep', e))
+      scanCategories(this.deps.registry, ids, (e) => this.setProgress('deep', e), scanOptions)
     );
     const at = this.now();
     this.lastDeepScan = { at, results };
@@ -143,6 +146,7 @@ export class CleanerController {
     const record = await this.exclusive('deep', () =>
       cleanScanResults(this.deps.registry, 'deep', confirmed, {
         now: this.now,
+        backupEnabled: this.deps.store.settings.backupEnabled,
         onProgress: (e) => this.setProgress('deep', e),
       })
     );
@@ -155,11 +159,13 @@ export class CleanerController {
   private async runLightClean(mode: RunMode): Promise<RunRecord> {
     const { settings } = this.deps.store;
     const ids = this.validIds(settings.autoClean.categories);
+    const scanOptions = await this.deps.getScanOptions?.();
 
     const record = await this.exclusive(mode, async () => {
-      const results = await scanCategories(this.deps.registry, ids, (e) => this.setProgress(mode, e));
+      const results = await scanCategories(this.deps.registry, ids, (e) => this.setProgress(mode, e), scanOptions);
       return cleanScanResults(this.deps.registry, mode, results, {
         now: this.now,
+        backupEnabled: settings.backupEnabled,
         itemFilter: (result) =>
           filterItemsForAutoClean(result, {
             now: this.now(),

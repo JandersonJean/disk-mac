@@ -167,12 +167,12 @@ program
 
 const app = program
   .command('app')
-  .description('Install or update the Mac Cleaner menu bar app');
+  .description('Install or update the Disk Mac menu bar app');
 
 app
   .command('install')
   .alias('update')
-  .description('Download the latest Mac Cleaner app from GitHub, verify it and install it into /Applications')
+  .description('Download the latest Disk Mac app from GitHub, verify it and install it into /Applications')
   .option('--no-open', 'Do not open the app after installing')
   .option('--dir <path>', 'Install into this folder instead of /Applications')
   .action(action(async (options) => {

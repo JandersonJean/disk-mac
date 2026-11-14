@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_AUTO_CATEGORIES, DEFAULT_DEEP_CATEGORIES, DEFAULT_SETTINGS, loadSettingsFrom, mergeSettings } from './settings.js';
+
+it('keeps the monitor shortcut and any explicitly selected value when loading older settings', () => {
+  const old = loadSettingsFrom({ showActivityMonitorInMenuBar: true, menuBarMetric: 'memory' });
+  expect(old).toMatchObject({ showActivityMonitorInMenuBar: true, menuBarValue: 'none' });
+  const updated = mergeSettings(old, { menuBarValue: 'network-up' });
+  expect(loadSettingsFrom({ ...updated, menuBarMetric: 'memory' }).menuBarValue).toBe('network-up');
+  expect(mergeSettings(updated, { menuBarValue: 'toString' }).menuBarValue).toBe('network-up');
+});
 import { CATEGORIES } from '../../../src/types.js';
 
 describe('settings', () => {

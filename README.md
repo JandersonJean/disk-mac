@@ -1,54 +1,35 @@
-# mac-cleaner-cli
+# Disk Mac
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/guhcostan/mac-cleaner-cli/main/assets/banner.png" alt="mac-cleaner-cli — free macOS disk space cleaner CLI tool" width="100%">
-</p>
+Aplicativo para macOS com interface em português. Reúne limpeza de arquivos, desinstalação de aplicativos e pacotes Homebrew, análise de disco, rotinas de otimização, backups e monitoramento do sistema.
 
-<p align="center">
-  Free up disk space on macOS with a single command. Removes caches, logs, Homebrew leftovers, Xcode DerivedData, and junk files — all from your terminal.<br>
-  No subscription. No telemetry. No bloatware.
-</p>
+Desenvolvido a partir do [mac-cleaner-cli de Gustavo Costa](https://github.com/guhcostan/mac-cleaner-cli), sob licença MIT. A CLI continua disponível no código deste repositório.
 
-<p align="center">
-  <strong><a href="https://guhcostan.github.io/mac-cleaner-cli/">🌐 Website</a></strong>
-</p>
+- **Monitor do sistema** com CPU, GPU, memória e rede a cada 500 ms enquanto visível, lista de processos e painel na barra de menus.
+- **Limpeza e backup** com revisão dos itens e restauração de cópias compatíveis.
+- **Análise de disco** com mapa de uso, navegação por pastas e envio à Lixeira após revisão.
 
-<p align="center">
-  <a href="https://www.npmjs.com/package/mac-cleaner-cli"><img src="https://img.shields.io/npm/v/mac-cleaner-cli?color=cb3837&label=npm&logo=npm" alt="npm version"></a>
-  <a href="https://www.npmjs.com/package/mac-cleaner-cli"><img src="https://img.shields.io/npm/dm/mac-cleaner-cli?color=cb3837&logo=npm" alt="npm downloads"></a>
-  <a href="https://github.com/guhcostan/mac-cleaner-cli/actions/workflows/ci.yml"><img src="https://github.com/guhcostan/mac-cleaner-cli/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
-</p>
+No macOS, use Node.js 22.18+ ou 24.11+ e Bun para executar a partir do código.
 
-<p align="center">
-  <a href="https://nodejs.org"><img src="https://img.shields.io/node/v/mac-cleaner-cli" alt="Node.js Version"></a>
-  <a href="https://www.apple.com/macos/"><img src="https://img.shields.io/badge/platform-macOS-000?logo=apple" alt="Platform: macOS"></a>
-  <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-6.0-3178c6?logo=typescript&logoColor=white" alt="TypeScript"></a>
-  <a href="https://socket.dev/npm/package/mac-cleaner-cli"><img src="https://socket.dev/api/badge/npm/package/mac-cleaner-cli" alt="Socket Badge"></a>
-</p>
+```bash
+git clone https://github.com/JandersonJean/disk-mac.git
+cd disk-mac
+bun install --frozen-lockfile
+cd desktop
+bun install --frozen-lockfile
+bun run start
+```
 
-<p align="center">
-  <a href="https://github.com/guhcostan/mac-cleaner-cli/stargazers"><img src="https://img.shields.io/github/stars/guhcostan/mac-cleaner-cli?style=social" alt="GitHub Stars"></a>
-  <a href="https://github.com/guhcostan/mac-cleaner-cli/network/members"><img src="https://img.shields.io/github/forks/guhcostan/mac-cleaner-cli?style=social" alt="GitHub Forks"></a>
-</p>
-
-<p align="center">
-  <a href="https://ko-fi.com/guhcostan"><img src="https://img.shields.io/badge/Ko--fi-Support_this_project-FF5E5B?style=for-the-badge&logo=ko-fi&logoColor=white" alt="Support on Ko-fi"></a>
-</p>
-
-<p align="center">
-  <strong>🪟 Also available for Windows:</strong> <a href="https://github.com/guhcostan/windows-cleaner-cli">windows-cleaner-cli</a>
-</p>
+Veja os [detalhes do desktop](desktop/README.md), os [releases do Disk Mac](https://github.com/JandersonJean/disk-mac/releases) e o [estado do projeto](AGENTS.md).
 
 ---
 
 ## ⚡ Quick Start
 
 ```bash
-npx mac-cleaner-cli
+bun run dev
 ```
 
-That's it. No installation needed. The CLI will:
+With the root project's dependencies installed, the CLI will:
 
 1. 🔍 **Scan** your Mac for cleanable files
 2. 📋 **Show** you what was found with sizes
@@ -57,12 +38,12 @@ That's it. No installation needed. The CLI will:
 
 ## 🖥️ Desktop App (menu bar) — new
 
-Prefer not to open a terminal? **Mac Cleaner** is a menu bar app built on the same scanners as the CLI.
+Prefer not to open a terminal? **Disk Mac** is a menu bar app built on the same scanners as the CLI.
 
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/app-dark.png">
-    <img src="assets/screenshots/app-light.png" alt="Mac Cleaner menu bar app: space freed, disk usage, last run and next automatic clean" width="620">
+    <img src="assets/screenshots/app-light.png" alt="Disk Mac menu bar app: space freed, disk usage, last run and next automatic clean" width="620">
   </picture>
 </p>
 
@@ -79,36 +60,26 @@ Prefer not to open a terminal? **Mac Cleaner** is a menu bar app built on the sa
   </picture>
 </p>
 
-Install or update it with one command:
-
-```bash
-npx mac-cleaner-cli app install
-# or, without Node.js:
-curl -fsSL https://guhcostan.github.io/mac-cleaner-cli/install.sh | bash
-```
-
-Both pick the build for your Mac (Apple Silicon or Intel), download the latest release, verify its SHA-256 checksum and install it into `/Applications`. Then give it **Full Disk Access** (System Settings → Privacy & Security) so it can see every cache.
-
-The `.dmg` files are also on [Releases](https://github.com/guhcostan/mac-cleaner-cli/releases), but the app isn't signed with an Apple Developer ID yet, so a `.dmg` downloaded with a browser shows a Gatekeeper warning first ([why, and how to open it](desktop/README.md#install)). See [`desktop/`](desktop/README.md) for details and how to build it yourself.
+The fork's installers use [Disk Mac Releases](https://github.com/JandersonJean/disk-mac/releases) after matching archives are published. To run the app from source, follow the build instructions above.
 
 ## 🎬 The CLI In Action
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/guhcostan/mac-cleaner-cli/main/assets/demo.gif" alt="mac-cleaner-cli demo" width="100%">
+  <img src="assets/demo.gif" alt="mac-cleaner-cli demo" width="100%">
 </p>
 
 ## ✨ Features
 
 | Feature | Description |
 |---------|-------------|
-| 🚀 **One Command** | Just run `npx mac-cleaner-cli` — no complex setup |
+| 🚀 **One Command** | Just run `bun run dev`  after installing the project dependencies |
 | 🎯 **Interactive** | Select exactly what you want to clean with checkboxes |
 | 📁 **File Explorer** | Drill down (`→`) into categories to select specific folders/files |
 | 🛡️ **Safe by Default** | Risky items hidden unless you use `--risky` |
 | 👀 **Dry Run** | Preview exactly what would be deleted with `--dry-run` |
 | ♻️ **Optional Backups** | Move items to a backup folder instead of deleting, restore later |
 | 🤖 **Scriptable** | `scan --json` and `clean --categories … --yes` for cron and CI |
-| 🖥️ **Menu Bar App** | Daily automatic cleaning, Deep Clean and history — `npx mac-cleaner-cli app install` |
+| 🖥️ **Menu Bar App** | Daily automatic cleaning, Deep Clean and history — `bun run dev app install` |
 | 🔍 **Smart Scanning** | Finds caches, logs, dev files, browser data, and more |
 | 📱 **App Uninstaller** | Remove apps completely with all associated files |
 | 🔧 **Maintenance** | Flush DNS cache, free purgeable space |
@@ -175,16 +146,16 @@ The `.dmg` files are also on [Releases](https://github.com/guhcostan/mac-cleaner
 
 ```bash
 # Interactive mode — scan, select, and clean
-npx mac-cleaner-cli
+bun run dev
 
 # Include risky categories
-npx mac-cleaner-cli --risky
+bun run dev --risky
 
 # Preview what would be deleted, without deleting anything
-npx mac-cleaner-cli --dry-run
+bun run dev --dry-run
 
 # Enable file picker for all categories
-npx mac-cleaner-cli --risky -f
+bun run dev --risky -f
 ```
 
 ### Folder-Level Selection (Interactive)
@@ -199,20 +170,20 @@ Supported categories: User Cache Files, Temporary Files, System Log Files, Devel
 
 ```bash
 # Scan only — see what can be cleaned without deleting anything
-npx mac-cleaner-cli scan
+bun run dev scan
 
 # Machine-readable output for scripts and integrations
-npx mac-cleaner-cli scan --json
-npx mac-cleaner-cli scan --json --verbose   # include item paths
+bun run dev scan --json
+bun run dev scan --json --verbose   # include item paths
 
 # Clean specific categories without prompts (great for cron/CI)
-npx mac-cleaner-cli clean --categories trash,browser-cache,homebrew --yes
+bun run dev clean --categories trash,browser-cache,homebrew --yes
 
 # Preview first
-npx mac-cleaner-cli clean --categories dev-cache --dry-run
+bun run dev clean --categories dev-cache --dry-run
 
 # Clean everything that is safe, no selection UI
-npx mac-cleaner-cli clean --all --yes
+bun run dev clean --all --yes
 ```
 
 Risky categories (downloads, iOS backups, etc) are always skipped unless you pass `--unsafe`.
@@ -222,24 +193,24 @@ Risky categories (downloads, iOS backups, etc) are always skipped unless you pas
 Remove applications completely with all their preferences, caches, and support files:
 
 ```bash
-npx mac-cleaner-cli uninstall
+bun run dev uninstall
 ```
 
 ### Maintenance Tasks
 
 ```bash
 # Flush DNS cache (may require sudo)
-npx mac-cleaner-cli maintenance --dns
+bun run dev maintenance --dns
 
 # Free purgeable space
-npx mac-cleaner-cli maintenance --purgeable
+bun run dev maintenance --purgeable
 
 # Delete Time Machine local snapshots (requires sudo, asks for confirmation)
-sudo npx mac-cleaner-cli maintenance --timemachine
+sudo bun run dev maintenance --timemachine
 
 # Preview it first, or skip the prompt
-npx mac-cleaner-cli maintenance --timemachine --dry-run
-sudo npx mac-cleaner-cli maintenance --timemachine --yes
+bun run dev maintenance --timemachine --dry-run
+sudo bun run dev maintenance --timemachine --yes
 ```
 
 Local snapshots are taken automatically by Time Machine and can grow to hundreds of gigabytes.
@@ -250,19 +221,19 @@ disconnected — but macOS recreates them as needed once it is reconnected.
 
 ```bash
 # List all available categories
-npx mac-cleaner-cli categories
+bun run dev categories
 
 # Manage configuration
-npx mac-cleaner-cli config --init
-npx mac-cleaner-cli config --show
+bun run dev config --init
+bun run dev config --show
 
 # Manage backups
-npx mac-cleaner-cli backup --list
-npx mac-cleaner-cli backup --restore <dir>
-npx mac-cleaner-cli backup --clean
+bun run dev backup --list
+bun run dev backup --restore <dir>
+bun run dev backup --clean
 
 # Install or update the menu bar app (--no-open, --dir <folder>)
-npx mac-cleaner-cli app install
+bun run dev app install
 ```
 
 ### Backups (opt-in)
@@ -310,39 +281,30 @@ category can come back empty without an obvious reason. Set `MAC_CLEANER_DEBUG=1
 print every skipped path and the underlying error:
 
 ```bash
-MAC_CLEANER_DEBUG=1 npx mac-cleaner-cli scan
+MAC_CLEANER_DEBUG=1 bun run dev scan
 ```
 
 Exit codes: `0` on success, `1` when a category could not be scanned or an item could
 not be deleted. `scan --json` also reports failures in an `errors` array.
-
-## 💻 Global Installation
-
-If you use this tool frequently:
-
-```bash
-npm install -g mac-cleaner-cli
-mac-cleaner-cli
-```
 
 ## 🔒 Security
 
 | | |
 |---|---|
 | ✅ **Open Source** | All code publicly available for audit |
-| ✅ **No Network** | Operates 100% offline (only `app install` talks to GitHub, to download the app) |
-| ✅ **No Root Required** | All operations run as current user |
+| **Local operations** | Scans and monitoring run locally. Release installers contact GitHub. |
+| **Permissions** | Most operations run as the current user. Some maintenance routines ask for macOS authorization. |
 | ✅ **Minimal Deps** | Only 5 runtime dependencies |
-| ✅ **CI/CD** | Every release tested with TypeScript, ESLint, and automated tests |
+| **CI** | GitHub Actions runs TypeScript, ESLint and automated tests |
 | ✅ **Socket.dev** | Dependencies monitored for supply chain attacks |
 
-Found a vulnerability? Report it via [GitHub Security Advisories](https://github.com/guhcostan/mac-cleaner-cli/security/advisories/new).
+Found a vulnerability? Report it via [GitHub Security Advisories](https://github.com/JandersonJean/disk-mac/security/advisories/new).
 
 ## 🛠️ Development
 
 ```bash
-git clone https://github.com/guhcostan/mac-cleaner-cli.git
-cd mac-cleaner-cli
+git clone https://github.com/JandersonJean/disk-mac.git
+cd disk-mac
 bun install
 bun run dev      # Run in dev mode
 bun run test     # Run tests
@@ -374,28 +336,12 @@ Quick steps:
 4. Run `bun run lint && bun run test`
 5. Open a Pull Request
 
-Looking for a place to start? Check issues labeled [`good first issue`](https://github.com/guhcostan/mac-cleaner-cli/labels/good%20first%20issue) or [`help wanted`](https://github.com/guhcostan/mac-cleaner-cli/labels/help%20wanted).
+Looking for a place to start? Check issues labeled [`good first issue`](https://github.com/JandersonJean/disk-mac/labels/good%20first%20issue) or [`help wanted`](https://github.com/JandersonJean/disk-mac/labels/help%20wanted).
 
 ## 💬 Community
 
-- [GitHub Discussions](https://github.com/guhcostan/mac-cleaner-cli/discussions) — questions, ideas, show & tell
-- [Issues](https://github.com/guhcostan/mac-cleaner-cli/issues) — bug reports and feature requests
-
-## ⭐ Star History
-
-If this tool saved you disk space, a star goes a long way! It helps more Mac users discover this free alternative to paid cleaners.
-
-[![Star History Chart](https://api.star-history.com/svg?repos=guhcostan/mac-cleaner-cli&type=Date)](https://star-history.com/#guhcostan/mac-cleaner-cli&Date)
-
-## 💚 Support
-
-If this tool saved you time or disk space, consider supporting the project!
-
-<p align="center">
-  <a href="https://ko-fi.com/guhcostan"><img src="https://ko-fi.com/img/githubbutton_sm.svg" alt="Support on Ko-fi"></a>
-</p>
-
-Your support helps maintain and improve this tool. Thank you! 🙏
+- [GitHub Discussions](https://github.com/JandersonJean/disk-mac/discussions) — questions, ideas, show & tell
+- [Issues](https://github.com/JandersonJean/disk-mac/issues) — bug reports and feature requests
 
 ## 📄 License
 

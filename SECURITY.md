@@ -11,7 +11,7 @@
 
 **Please do not report security vulnerabilities through public GitHub issues.**
 
-Report vulnerabilities via [GitHub Security Advisories](https://github.com/guhcostan/mac-cleaner-cli/security/advisories/new).
+Report vulnerabilities via [GitHub Security Advisories](https://github.com/JandersonJean/disk-mac/security/advisories/new).
 
 Include:
 - Description of the vulnerability

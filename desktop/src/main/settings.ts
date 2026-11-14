@@ -1,5 +1,6 @@
 import { CATEGORIES, type CategoryId } from '../../../src/types.js';
 import type { Settings, SettingsPatch } from '../shared/types.js';
+import { MENU_BAR_VALUE_OPTIONS } from '../shared/system-monitor.js';
 
 /**
  * Categories the daily automatic run cleans out of the box.
@@ -30,9 +31,15 @@ export const DEFAULT_SETTINGS: Settings = {
     categories: DEFAULT_AUTO_CATEGORIES,
     tempFilesMinAgeHours: 24,
   },
+  backupEnabled: false,
+  backupRetentionDays: 7,
+  downloadsDaysOld: 30,
+  largeFilesMinSize: 500 * 1024 * 1024,
   notifyAfterAutoClean: true,
   launchAtLogin: true,
   showFreedInMenuBar: false,
+  showActivityMonitorInMenuBar: false,
+  menuBarValue: 'none',
 };
 
 function clampInt(value: unknown, min: number, max: number, fallback: number): number {
@@ -73,9 +80,16 @@ export function mergeSettings(current: Settings, patch: SettingsPatch | unknown)
         current.autoClean.tempFilesMinAgeHours
       ),
     },
+    backupEnabled: bool(p.backupEnabled, current.backupEnabled),
+    backupRetentionDays: clampInt(p.backupRetentionDays ?? current.backupRetentionDays, 1, 365, current.backupRetentionDays),
+    downloadsDaysOld: clampInt(p.downloadsDaysOld ?? current.downloadsDaysOld, 1, 365, current.downloadsDaysOld),
+    largeFilesMinSize: clampInt(p.largeFilesMinSize ?? current.largeFilesMinSize, 1024, 100 * 1024 * 1024 * 1024, current.largeFilesMinSize),
     notifyAfterAutoClean: bool(p.notifyAfterAutoClean, current.notifyAfterAutoClean),
     launchAtLogin: bool(p.launchAtLogin, current.launchAtLogin),
     showFreedInMenuBar: bool(p.showFreedInMenuBar, current.showFreedInMenuBar),
+    showActivityMonitorInMenuBar: bool(p.showActivityMonitorInMenuBar, current.showActivityMonitorInMenuBar),
+    menuBarValue: typeof p.menuBarValue === 'string' && Object.hasOwn(MENU_BAR_VALUE_OPTIONS, p.menuBarValue)
+      ? p.menuBarValue : current.menuBarValue,
   };
 }
 

@@ -1,11 +1,14 @@
 import chalk from 'chalk';
 import confirm from '@inquirer/confirm';
 import checkbox from '@inquirer/checkbox';
-import { readdir, stat, rm, readFile, lstat, unlink } from 'fs/promises';
+import { physicalFs } from '../utils/physical-fs.js';
+import { spawn } from 'child_process';
 import { join, basename, resolve } from 'path';
 import { homedir } from 'os';
 import { exists, getSize, formatSize, createCleanProgress, isProtectedPath, validatePathSafety, sanitizeDisplayName } from '../utils/index.js';
 import { debugError, errorCode, formatError } from '../utils/errors.js';
+
+const { readdir, stat, rm, readFile, lstat, unlink, access } = physicalFs;
 
 /**
  * Escapes all regex metacharacters in a string.
@@ -22,11 +25,15 @@ function escapeRegex(str: string): string {
 async function getBundleId(appPath: string): Promise<string | null> {
   try {
     const plistPath = join(appPath, 'Contents', 'Info.plist');
-    const content = await readFile(plistPath, 'utf-8');
+    const content = await readFile(plistPath);
+    let plistContent = content.toString('utf-8');
+    if (content.subarray(0, 6).toString() === 'bplist') {
+      plistContent = await convertBinaryPlistToXml(plistPath);
+    }
     
     // Parse CFBundleIdentifier from plist
     // Note: This is a simple regex parser. For production, consider using a proper plist parser.
-    const match = content.match(/<key>CFBundleIdentifier<\/key>\s*<string>([^<]+)<\/string>/);
+    const match = plistContent.match(/<key>CFBundleIdentifier<\/key>\s*<string>([^<]+)<\/string>/);
     if (match && match[1]) {
       // Validate the bundle ID format (should be reverse domain notation)
       const bundleId = match[1].trim();
@@ -39,6 +46,21 @@ async function getBundleId(appPath: string): Promise<string | null> {
     debugError(`getBundleId(${appPath})`, error);
     return null;
   }
+}
+
+function convertBinaryPlistToXml(plistPath: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn('/usr/bin/plutil', ['-convert', 'xml1', '-o', '-', plistPath], {
+      timeout: 5000,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    let stdout = '';
+    let stderr = '';
+    proc.stdout.on('data', (data: Buffer) => { stdout += data.toString(); });
+    proc.stderr.on('data', (data: Buffer) => { stderr += data.toString(); });
+    proc.on('error', reject);
+    proc.on('close', (code) => code === 0 ? resolve(stdout) : reject(new Error(stderr || `plutil exited with code ${code}`)));
+  });
 }
 
 /**
@@ -58,21 +80,53 @@ async function safeRemove(path: string): Promise<string | null> {
     if (stats.isSymbolicLink()) {
       await unlink(path);
     } else {
-      await rm(path, { recursive: true, force: true });
+      await rm(path, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
     }
     return null;
   } catch (error) {
+    if (errorCode(error) === 'ENOENT') return null;
     debugError(`safeRemove(${path})`, error);
     return errorCode(error);
   }
 }
 
-interface AppInfo {
+function removalFailure(label: string, code: string): string {
+  const hint = code === 'ENOTEMPTY' || code === 'EBUSY'
+    ? ' Feche o aplicativo e tente novamente; ainda há arquivos na pasta.'
+    : code === 'EACCES' || code === 'EPERM'
+      ? ' Verifique as permissões desse local no macOS.'
+      : '';
+  return `Não foi possível remover ${label} (${code}).${hint}`;
+}
+
+export interface InstalledAppInfo {
   name: string;
   path: string;
   size: number;
   relatedPaths: string[];
   totalSize: number;
+}
+
+export interface UninstallResult {
+  success: boolean;
+  appName: string;
+  freedSpace: number;
+  removedItems: number;
+  errors: string[];
+}
+
+export type InstallSource = 'app-bundle' | 'homebrew-cask' | 'homebrew-formula';
+
+export type InstalledTarget = Omit<InstalledAppInfo, 'path'> & {
+  id: string;
+  source: InstallSource;
+  path?: string;
+  version?: string;
+};
+
+export interface InstalledTargetsResult {
+  apps: InstalledTarget[];
+  warnings: string[];
 }
 
 interface UninstallCommandOptions {
@@ -101,7 +155,7 @@ const RELATED_PATHS_TEMPLATES = [
 export async function uninstallCommand(options: UninstallCommandOptions): Promise<void> {
   console.log(chalk.cyan('\nScanning installed applications...\n'));
 
-  const apps = await getInstalledApps();
+  const apps = await scanInstalledApps();
 
   if (apps.length === 0) {
     console.log(chalk.yellow('No applications found.\n'));
@@ -217,8 +271,9 @@ export async function uninstallCommand(options: UninstallCommandOptions): Promis
   console.log();
 }
 
-async function getInstalledApps(): Promise<AppInfo[]> {
-  const apps: AppInfo[] = [];
+/** Lists app bundles and matching per-user support files for the desktop UI and CLI. */
+export async function scanInstalledApps(): Promise<InstalledAppInfo[]> {
+  const apps: InstalledAppInfo[] = [];
 
   for (const appDir of [APPLICATIONS_DIR, USER_APPLICATIONS_DIR]) {
     if (!(await exists(appDir))) continue;
@@ -235,6 +290,11 @@ async function getInstalledApps(): Promise<AppInfo[]> {
         try {
           const stats = await stat(appPath);
           if (!stats.isDirectory()) continue;
+
+          const bundleId = await getBundleId(appPath);
+          // Apple-bundled apps are part of macOS or iWork's managed app set;
+          // do not present them as ordinary removable third-party installs.
+          if (bundleId?.startsWith('com.apple.')) continue;
 
           const appSize = await getSize(appPath);
           const relatedPaths = await findRelatedPaths(appName, appPath);
@@ -263,6 +323,201 @@ async function getInstalledApps(): Promise<AppInfo[]> {
   }
 
   return apps.sort((a, b) => b.totalSize - a.totalSize);
+}
+
+const BREW_PATHS = ['/opt/homebrew/bin/brew', '/usr/local/bin/brew'];
+
+async function getBrewPath(): Promise<string | null> {
+  for (const path of BREW_PATHS) {
+    try {
+      await access(path);
+      return path;
+    } catch {
+      // Try the other standard Homebrew prefix.
+    }
+  }
+  return null;
+}
+
+function runBrew(brewPath: string, args: string[]): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn(brewPath, args, { timeout: 30000, stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = '';
+    let stderr = '';
+    proc.stdout.on('data', (data: Buffer) => { stdout += data.toString(); });
+    proc.stderr.on('data', (data: Buffer) => { stderr += data.toString(); });
+    proc.on('error', reject);
+    proc.on('close', (code) => code === 0 ? resolve(stdout) : reject(new Error(stderr.trim() || `brew exited with code ${code}`)));
+  });
+}
+
+function parseBrewPackages(output: string): { name: string; version: string }[] {
+  return output.split('\n').map((line) => line.trim()).filter(Boolean).map((line) => {
+    const [name, ...version] = line.split(/\s+/);
+    return { name, version: version.join(' ') };
+  }).filter((entry) => /^[A-Za-z0-9@+._/-]+$/.test(entry.name) && !entry.name.startsWith('-'));
+}
+
+function comparableAppName(value: string): string {
+  return value.toLocaleLowerCase('en-US').replace(/[^a-z0-9]/g, '');
+}
+
+/** Combines regular app bundles with Homebrew casks and formulae. */
+export async function scanUninstallTargets(excludePaths: string[] = []): Promise<InstalledTargetsResult> {
+  const excluded = new Set(excludePaths.map((path) => resolve(path)));
+  const bundles = (await scanInstalledApps()).filter((bundle) => !excluded.has(resolve(bundle.path)));
+  const targets: InstalledTarget[] = bundles.map((app) => ({ ...app, id: `bundle:${app.path}`, source: 'app-bundle' }));
+  const warnings: string[] = [];
+  const brewPath = await getBrewPath();
+  if (!brewPath) return { apps: targets, warnings };
+
+  let casks: { name: string; version: string }[] = [];
+  let formulae: { name: string; version: string }[] = [];
+  try {
+    casks = parseBrewPackages(await runBrew(brewPath, ['list', '--cask', '--versions']));
+  } catch {
+    warnings.push('Homebrew Casks: não foi possível consultar a lista de aplicativos.');
+  }
+  try {
+    formulae = parseBrewPackages(await runBrew(brewPath, ['list', '--formula', '--versions']));
+  } catch {
+    warnings.push('Homebrew Fórmulas: não foi possível consultar a lista de pacotes.');
+  }
+
+  const bundleByName = new Map(bundles.map((bundle) => [comparableAppName(bundle.name), bundle]));
+  const matchedBundlePaths = new Set<string>();
+  for (const cask of casks) {
+    const bundle = bundleByName.get(comparableAppName(cask.name));
+    if (bundle) matchedBundlePaths.add(bundle.path);
+    targets.push({
+      id: `cask:${cask.name}`,
+      source: 'homebrew-cask',
+      name: bundle?.name ?? cask.name,
+      path: bundle?.path,
+      size: bundle?.size ?? 0,
+      relatedPaths: bundle?.relatedPaths ?? [],
+      totalSize: bundle?.totalSize ?? 0,
+      version: cask.version,
+    });
+  }
+  for (const formula of formulae) {
+    targets.push({
+      id: `formula:${formula.name}`,
+      source: 'homebrew-formula',
+      name: formula.name,
+      size: 0,
+      relatedPaths: [],
+      totalSize: 0,
+      version: formula.version,
+    });
+  }
+
+  const unique = targets.filter((target) => target.source !== 'app-bundle' || !matchedBundlePaths.has(target.path ?? ''));
+  return { apps: unique.sort((a, b) => b.totalSize - a.totalSize || a.name.localeCompare(b.name)), warnings };
+}
+
+/** Uninstalls a target only after it is found again in a fresh inventory scan. */
+export async function uninstallTarget(
+  targetId: string,
+  onProgress?: (completed: number, total: number, current: string) => void,
+  excludePaths: string[] = []
+): Promise<UninstallResult> {
+  const inventory = await scanUninstallTargets(excludePaths);
+  const target = inventory.apps.find((candidate) => candidate.id === targetId);
+  if (!target) throw new Error('Application was not found in the installed application list. Scan again before uninstalling.');
+  if (target.source === 'app-bundle') {
+    return uninstallApplication(target.path!, onProgress);
+  }
+
+  const brewPath = await getBrewPath();
+  if (!brewPath) throw new Error('O Homebrew não está mais disponível. Atualize a lista de aplicativos.');
+  const packageName = target.id.slice(target.source === 'homebrew-cask' ? 'cask:'.length : 'formula:'.length);
+  if (!/^[A-Za-z0-9@+._/-]+$/.test(packageName) || packageName.startsWith('-')) {
+    throw new Error('O identificador do pacote Homebrew é inválido. Atualize a lista de aplicativos.');
+  }
+
+  const total = 1 + (target.path ? 1 : 0) + target.relatedPaths.length;
+  let completed = 0;
+  onProgress?.(completed, total, target.name);
+  const kindArg = target.source === 'homebrew-cask' ? '--cask' : '--formula';
+  try {
+    await runBrew(brewPath, ['uninstall', kindArg, packageName]);
+  } catch (error) {
+    debugError(`uninstallTarget(${target.id})`, error);
+    throw new Error(`O Homebrew não conseguiu remover ${target.name}. Verifique se o pacote está em uso e tente novamente.`, { cause: error });
+  }
+  completed++;
+  onProgress?.(completed, total, target.name);
+  let freedSpace = 0;
+  let removedItems = 1;
+  const errors: string[] = [];
+  if (target.path && await exists(target.path)) {
+    const size = await getSize(target.path);
+    const removeError = await safeRemove(target.path);
+    if (removeError) errors.push(removalFailure('o aplicativo', removeError));
+    else { freedSpace += size; removedItems++; }
+    completed++;
+    onProgress?.(completed, total, target.path);
+  }
+  for (const relatedPath of target.relatedPaths) {
+    const size = await getSize(relatedPath);
+    const removeError = await safeRemove(relatedPath);
+    if (removeError) errors.push(removalFailure(relatedPath.replace(homedir(), '~'), removeError));
+    else { freedSpace += size; removedItems++; }
+    completed++;
+    onProgress?.(completed, total, relatedPath);
+  }
+  onProgress?.(total, total, target.name);
+  return { success: errors.length === 0, appName: target.name, freedSpace, removedItems, errors };
+}
+
+/**
+ * Removes one freshly discovered app bundle and its related per-user files.
+ * The renderer can only request an app path returned by scanInstalledApps;
+ * the path is revalidated against a fresh scan immediately before deletion.
+ */
+export async function uninstallApplication(
+  appPath: string,
+  onProgress?: (completed: number, total: number, current: string) => void
+): Promise<UninstallResult> {
+  const apps = await scanInstalledApps();
+  const app = apps.find((candidate) => candidate.path === appPath);
+  if (!app) {
+    throw new Error('Application was not found in the installed application list. Scan again before uninstalling.');
+  }
+
+  const errors: string[] = [];
+  let freedSpace = 0;
+  let removedItems = 0;
+  const total = 1 + app.relatedPaths.length;
+  let completed = 0;
+
+  onProgress?.(completed, total, app.name);
+  const appError = await safeRemove(app.path);
+  completed++;
+  onProgress?.(completed, total, app.name);
+  if (appError) {
+    errors.push(removalFailure('o aplicativo', appError));
+    return { success: false, appName: app.name, freedSpace, removedItems, errors };
+  }
+  freedSpace += app.size;
+  removedItems++;
+
+  for (const relatedPath of app.relatedPaths) {
+    onProgress?.(completed, total, relatedPath);
+    const size = await getSize(relatedPath);
+    const removeError = await safeRemove(relatedPath);
+    completed++;
+    onProgress?.(completed, total, relatedPath);
+    if (removeError) {
+      errors.push(removalFailure(relatedPath.replace(homedir(), '~'), removeError));
+      continue;
+    }
+    freedSpace += size;
+    removedItems++;
+  }
+
+  return { success: errors.length === 0, appName: app.name, freedSpace, removedItems, errors };
 }
 
 async function findRelatedPaths(appName: string, appPath?: string): Promise<string[]> {
@@ -328,7 +583,26 @@ async function findRelatedPaths(appName: string, appPath?: string): Promise<stri
     }
   }
 
-  return paths;
+  // On a case-insensitive volume, name variants can point to the same file.
+  // Keep symlinks distinct from their targets; removal must only unlink the link.
+  const uniquePaths: string[] = [];
+  const identities = new Set<string>();
+  for (const path of paths) {
+    let identity = path;
+    try {
+      const stats = await lstat(path);
+      identity = stats.isSymbolicLink()
+        ? `link:${stats.dev}:${stats.ino}`
+        : await physicalFs.realpath(path);
+    } catch {
+      // Keep inaccessible/disappearing paths so removal can report their outcome.
+    }
+    if (!identities.has(identity)) {
+      identities.add(identity);
+      uniquePaths.push(path);
+    }
+  }
+  return uniquePaths;
 }
 
 /**

@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
-import { CATEGORIES, type CategoryId, type CleanableItem, type ScanResult, type Scanner } from '../../../src/types.js';
+import { CATEGORIES, type CategoryId, type CleanableItem, type ScanResult, type Scanner, type ScannerOptions } from '../../../src/types.js';
+import { ensureBackupDir } from '../../../src/utils/backup.js';
 import type {
   CategoryRunResult,
   CategoryScanPreview,
@@ -38,7 +39,8 @@ export function filterItemsForAutoClean(result: ScanResult, options: AutoFilterO
 export async function scanCategories(
   registry: ScannerRegistry,
   categoryIds: CategoryId[],
-  onProgress?: (event: ProgressEvent) => void
+  onProgress?: (event: ProgressEvent) => void,
+  scanOptions?: ScannerOptions
 ): Promise<ScanResult[]> {
   const ids = categoryIds.filter((id) => registry[id]);
   const results: ScanResult[] = [];
@@ -47,7 +49,7 @@ export async function scanCategories(
     const scanner = registry[ids[i]]!;
     onProgress?.({ phase: 'scanning', completed: i, total: ids.length, current: scanner.category.name });
     try {
-      results.push(await scanner.scan());
+      results.push(await scanner.scan(scanOptions));
     } catch (error) {
       results.push({
         category: scanner.category,
@@ -69,6 +71,7 @@ export async function cleanScanResults(
   options: {
     now?: () => Date;
     itemFilter?: (result: ScanResult) => CleanableItem[];
+    backupEnabled?: boolean;
     onProgress?: (event: ProgressEvent) => void;
   } = {}
 ): Promise<RunRecord> {
@@ -76,6 +79,11 @@ export async function cleanScanResults(
   const startedAt = now();
   const categories: CategoryRunResult[] = [];
   const errors: string[] = [];
+  const canBackUp = options.backupEnabled === true && results.some((result) => {
+    const items = options.itemFilter ? options.itemFilter(result) : result.items;
+    return items.length > 0 && registry[result.category.id]?.supportsBackup !== false;
+  });
+  const backupDir = canBackUp ? await ensureBackupDir() : undefined;
 
   for (let i = 0; i < results.length; i++) {
     const result = results[i];
@@ -90,11 +98,12 @@ export async function cleanScanResults(
     if (!scanner || items.length === 0) continue;
 
     try {
-      const cleaned = await scanner.clean(items, false);
+      const cleaned = await scanner.clean(items, false, scanner.supportsBackup === false ? undefined : backupDir);
       categories.push({
         id: result.category.id,
         name: result.category.name,
         freedSpace: cleaned.freedSpace,
+        backedUpSize: cleaned.backedUpSize,
         cleanedItems: cleaned.cleanedItems,
         errors: cleaned.errors,
       });
@@ -118,6 +127,8 @@ export async function cleanScanResults(
     startedAt: startedAt.toISOString(),
     finishedAt: now().toISOString(),
     freedSpace: categories.reduce((sum, c) => sum + c.freedSpace, 0),
+    backedUpSize: categories.reduce((sum, c) => sum + (c.backedUpSize ?? 0), 0),
+    backupDir,
     cleanedItems: categories.reduce((sum, c) => sum + c.cleanedItems, 0),
     categories: categories.sort((a, b) => b.freedSpace - a.freedSpace),
     errors,

@@ -1,9 +1,12 @@
-import { mkdir, rename, readdir, stat, rm, cp } from 'fs/promises';
+import { constants } from 'node:fs';
+import { physicalFs } from './physical-fs.js';
 import { join, dirname, resolve, relative } from 'path';
 import { homedir } from 'os';
 import type { CleanableItem } from '../types.js';
 import { validatePathSafety } from './fs.js';
 import { debugError } from './errors.js';
+
+const { mkdir, rename, readdir, stat, rm, cp, lstat, realpath, link, unlink, copyFile, readlink, symlink, rmdir } = physicalFs;
 
 const BACKUP_DIR = join(homedir(), '.mac-cleaner-cli', 'backup');
 const BACKUP_RETENTION_DAYS = 7;
@@ -174,10 +177,11 @@ export async function backupItems(
   return { success, failed, backedUpSize };
 }
 
-export async function cleanOldBackups(): Promise<number> {
+export async function cleanOldBackups(retentionDays = BACKUP_RETENTION_DAYS): Promise<number> {
   let cleaned = 0;
   const now = Date.now();
-  const maxAge = BACKUP_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+  const days = Number.isInteger(retentionDays) ? Math.min(365, Math.max(1, retentionDays)) : BACKUP_RETENTION_DAYS;
+  const maxAge = days * 24 * 60 * 60 * 1000;
 
   try {
     const entries = await readdir(BACKUP_DIR);
@@ -268,18 +272,30 @@ export async function restoreBackup(backupDir: string): Promise<{ success: numbe
   const home = homedir();
 
   // Validate that backupDir is within our expected backup location.
-  // The `+ '/'` matters: without it, `~/.mac-cleaner-cli/backup-anything`
+  // The `+ '/'` matters: without it, a sibling directory with a similar name
   // passed the check simply by being a textual prefix.
   const resolvedBackupDir = resolve(backupDir);
   if (
-    resolvedBackupDir !== BACKUP_DIR &&
-    !resolvedBackupDir.startsWith(BACKUP_DIR + '/')
+    dirname(resolvedBackupDir) !== BACKUP_DIR
   ) {
     return {
       success: 0,
       failed: 1,
-      errors: ['Invalid backup directory: must be within the mac-cleaner-cli backup folder']
+      errors: ['Invalid backup directory: must be within a valid backup folder']
     };
+  }
+
+  // Session and backup root must be real directories, never redirected links.
+  // Resolve HOME first: macOS can expose the same volume through aliases.
+  let canonicalHome: string;
+  try {
+    canonicalHome = await realpath(home);
+    const rootStats = await lstat(BACKUP_DIR);
+    const sessionStats = await lstat(resolvedBackupDir);
+    if (!rootStats.isDirectory() || !sessionStats.isDirectory() || rootStats.isSymbolicLink() || sessionStats.isSymbolicLink()) throw new Error('Invalid backup directory');
+    if (await realpath(resolvedBackupDir) !== join(await realpath(BACKUP_DIR), resolvedBackupDir.slice(BACKUP_DIR.length + 1))) throw new Error('Invalid backup directory');
+  } catch {
+    return { success: 0, failed: 1, errors: ['Invalid backup directory: cannot read a real backup session'] };
   }
 
   async function restoreDir(dir: string): Promise<void> {
@@ -297,7 +313,13 @@ export async function restoreBackup(backupDir: string): Promise<{ success: numbe
       const entryPath = join(dir, entry.name);
 
       if (entry.isDirectory()) {
+        const directoryStats = await lstat(entryPath).catch(() => null);
+        if (!directoryStats?.isDirectory() || directoryStats.isSymbolicLink()) {
+          errors.push(`Backup directory changed: ${entry.name}`); failed++; continue;
+        }
         await restoreDir(entryPath);
+        // Remove only directories that actually became empty after restoration.
+        await rmdir(entryPath).catch(() => undefined);
       } else {
         // Compute the relative path from backup directory
         const relFromBackup = relative(resolvedBackupDir, entryPath);
@@ -326,12 +348,41 @@ export async function restoreBackup(backupDir: string): Promise<{ success: numbe
         }
 
         try {
+          // Check the nearest existing ancestor before creating directories.
+          let ancestor = dirname(targetPath);
+          for (;;) {
+            try {
+              const canonical = await realpath(ancestor);
+              if (canonical !== canonicalHome && !canonical.startsWith(canonicalHome + '/')) throw new Error('Destination points outside home directory');
+              break;
+            } catch (error) {
+              if ((error as NodeJS.ErrnoException).code !== 'ENOENT' || ancestor === dirname(ancestor)) throw error;
+              ancestor = dirname(ancestor);
+            }
+          }
           await mkdir(dirname(targetPath), { recursive: true });
-          await rename(entryPath, targetPath);
+          const parent = await realpath(dirname(targetPath));
+          if (parent !== canonicalHome && !parent.startsWith(canonicalHome + '/')) throw new Error('Destination points outside home directory');
+          const source = await lstat(entryPath);
+          if (source.isSymbolicLink()) {
+            // symlink() fails with EEXIST, including dangling destination links.
+            await symlink(await readlink(entryPath), targetPath);
+          } else if (source.isFile()) {
+            try {
+              // Unlike rename(), link() cannot overwrite an existing destination.
+              await link(entryPath, targetPath);
+            } catch (error) {
+              if ((error as NodeJS.ErrnoException).code !== 'EXDEV') throw error;
+              await copyFile(entryPath, targetPath, constants.COPYFILE_EXCL);
+            }
+          } else throw new Error('Unsupported backup item');
+          await unlink(entryPath);
           success++;
         } catch (error) {
           const code = (error as NodeJS.ErrnoException).code;
-          errors.push(`Failed to restore ${entry.name}: ${code || 'unknown error'}`);
+          errors.push(code === 'EEXIST'
+            ? `Arquivo existente preservado; o original continua no backup: ${targetPath}`
+            : `Falha ao restaurar ${entry.name}: ${code || (error instanceof Error ? error.message : 'erro desconhecido')}`);
           failed++;
         }
       }
@@ -339,6 +390,7 @@ export async function restoreBackup(backupDir: string): Promise<{ success: numbe
   }
 
   await restoreDir(resolvedBackupDir);
+  if (failed === 0) await rmdir(resolvedBackupDir).catch(() => undefined);
   return { success, failed, errors };
 }
 

@@ -13,22 +13,22 @@ import {
   type Release,
 } from './app.js';
 
-const ZIP_BYTES = Buffer.from('pretend this is a zip with Mac Cleaner.app inside');
+const ZIP_BYTES = Buffer.from('pretend this is a zip with Disk Mac.app inside');
 const ZIP_SHA = createHash('sha256').update(ZIP_BYTES).digest('hex');
 
 function release(overrides: Partial<Release> = {}): Release {
   return {
     tag_name: 'v1.4.0',
     assets: [
-      { name: 'Mac-Cleaner-1.4.0-arm64.dmg', browser_download_url: 'https://github.com/x/arm64.dmg', digest: null },
+      { name: 'Disk-Mac-1.4.0-arm64.dmg', browser_download_url: 'https://github.com/x/arm64.dmg', digest: null },
       {
-        name: 'Mac-Cleaner-1.4.0-arm64-mac.zip',
-        browser_download_url: 'https://github.com/guhcostan/mac-cleaner-cli/releases/download/v1.4.0/Mac-Cleaner-1.4.0-arm64-mac.zip',
+        name: 'Disk-Mac-1.4.0-arm64-mac.zip',
+        browser_download_url: 'https://github.com/JandersonJean/disk-mac/releases/download/v1.4.0/Disk-Mac-1.4.0-arm64-mac.zip',
         digest: `sha256:${ZIP_SHA}`,
       },
       {
-        name: 'Mac-Cleaner-1.4.0-x64-mac.zip',
-        browser_download_url: 'https://github.com/guhcostan/mac-cleaner-cli/releases/download/v1.4.0/Mac-Cleaner-1.4.0-x64-mac.zip',
+        name: 'Disk-Mac-1.4.0-x64-mac.zip',
+        browser_download_url: 'https://github.com/JandersonJean/disk-mac/releases/download/v1.4.0/Disk-Mac-1.4.0-x64-mac.zip',
         digest: `sha256:${ZIP_SHA}`,
       },
     ],
@@ -38,25 +38,25 @@ function release(overrides: Partial<Release> = {}): Release {
 
 describe('pickAsset', () => {
   it('picks the zip for the requested architecture', () => {
-    expect(pickAsset(release(), 'arm64').name).toBe('Mac-Cleaner-1.4.0-arm64-mac.zip');
-    expect(pickAsset(release(), 'x64').name).toBe('Mac-Cleaner-1.4.0-x64-mac.zip');
+    expect(pickAsset(release(), 'arm64').name).toBe('Disk-Mac-1.4.0-arm64-mac.zip');
+    expect(pickAsset(release(), 'x64').name).toBe('Disk-Mac-1.4.0-x64-mac.zip');
   });
 
   it('fails when the architecture is missing', () => {
     const r = release({ assets: release().assets.filter((a) => !a.name.includes('x64')) });
-    expect(() => pickAsset(r, 'x64')).toThrow('no Mac Cleaner app for x64');
+    expect(() => pickAsset(r, 'x64')).toThrow('no Disk Mac app for x64');
   });
 
   it('refuses assets served from somewhere other than github.com', () => {
     const r = release({
-      assets: [{ name: 'Mac-Cleaner-1.4.0-arm64-mac.zip', browser_download_url: 'https://evil.example/app.zip', digest: null }],
+      assets: [{ name: 'Disk-Mac-1.4.0-arm64-mac.zip', browser_download_url: 'https://evil.example/app.zip', digest: null }],
     });
     expect(() => pickAsset(r, 'arm64')).toThrow('Unexpected download URL');
   });
 
   it('ignores names that only look similar', () => {
     const r = release({
-      assets: [{ name: 'Mac-Cleaner-../../x-arm64-mac.zip', browser_download_url: 'https://github.com/x', digest: null }],
+      assets: [{ name: 'Disk-Mac-../../x-arm64-mac.zip', browser_download_url: 'https://github.com/x', digest: null }],
     });
     expect(() => pickAsset(r, 'arm64')).toThrow();
   });
@@ -162,6 +162,7 @@ describe('installApp', () => {
       '/usr/bin/ditto',
       '/usr/bin/ditto',
       '/usr/bin/pgrep',
+      '/usr/bin/pgrep',
       '/usr/bin/xattr',
       '/usr/bin/open',
     ]);
@@ -183,8 +184,47 @@ describe('installApp', () => {
     expect(await readFile(join(installDir, APP_BUNDLE, 'Contents', 'Info.plist'), 'utf-8')).toBe('new version');
     expect(await stat(join(installDir, APP_BUNDLE, 'Contents', 'stale-file')).catch(() => null)).toBeNull();
     expect(commands()).toContain('/usr/bin/osascript');
+    expect(calls.filter((call) => call[0] === '/usr/bin/osascript').map((call) => call[2])).toEqual([
+      'if application id "io.github.guhcostan.diskmac" is running then\n  tell application id "io.github.guhcostan.diskmac" to quit\nend if',
+      'if application id "io.github.guhcostan.maccleaner" is running then\n  tell application id "io.github.guhcostan.maccleaner" to quit\nend if',
+    ]);
     expect(commands()).not.toContain('/usr/bin/open');
     expect(await stat(join(installDir, `.${APP_BUNDLE}.installing`)).catch(() => null)).toBeNull();
+  });
+
+  it('quits a legacy-only installation even when the new bundle identifier is unavailable', async () => {
+    const legacyBundle = join(installDir, 'Mac Cleaner.app');
+    await mkdir(join(legacyBundle, 'Contents'), { recursive: true });
+    await writeFile(join(legacyBundle, 'Contents', 'Info.plist'), 'legacy version');
+    const base = deps();
+
+    await installApp({ dir: installDir, open: false }, {
+      ...base,
+      run: async (command, args) => {
+        if (command === '/usr/bin/pgrep') {
+          calls.push([command, ...args]);
+          if (args[1] !== 'Mac Cleaner') throw new Error('no process');
+          return '123\n';
+        }
+        if (command === '/usr/bin/osascript' && args[1].includes('io.github.guhcostan.diskmac')) {
+          calls.push([command, ...args]);
+          throw new Error('new bundle identifier not installed yet');
+        }
+        return base.run(command, args);
+      },
+    });
+
+    expect(calls.filter((call) => call[0] === '/usr/bin/pgrep')).toEqual([
+      ['/usr/bin/pgrep', '-x', 'Disk Mac'],
+      ['/usr/bin/pgrep', '-x', 'Mac Cleaner'],
+    ]);
+    expect(calls).toContainEqual([
+      '/usr/bin/osascript', '-e',
+      'if application id "io.github.guhcostan.maccleaner" is running then\n  tell application id "io.github.guhcostan.maccleaner" to quit\nend if',
+    ]);
+    expect(await stat(legacyBundle).catch(() => null)).toBeNull();
+    expect(await readFile(join(installDir, APP_BUNDLE, 'Contents', 'Info.plist'), 'utf-8')).toBe('new version');
+    expect(commands()).not.toContain('/usr/bin/open');
   });
 
   it('installs nothing when the checksum does not match', async () => {

@@ -45,12 +45,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/guhcostan/mac-cleaner-cli.git"
+    "url": "git+https://github.com/JandersonJean/disk-mac.git"
   },
   "bugs": {
-    "url": "https://github.com/guhcostan/mac-cleaner-cli/issues"
+    "url": "https://github.com/JandersonJean/disk-mac/issues"
   },
-  "homepage": "https://guhcostan.github.io/mac-cleaner-cli/",
+  "homepage": "https://github.com/JandersonJean/disk-mac",
   "devDependencies": {
     "@eslint/js": "10",
     "@types/bun": "^1.2.7",

@@ -11,7 +11,7 @@ import { pipeline } from 'stream/promises';
 import type { ReadableStream as WebReadableStream } from 'stream/web';
 
 /**
- * Installs or updates the Mac Cleaner menu bar app from the latest GitHub release.
+ * Installs or updates the Disk Mac menu bar app from the latest GitHub release.
  *
  * The app is not signed with an Apple Developer ID, so a .dmg downloaded with a
  * browser is flagged by Gatekeeper. Browsers mark downloads with the
@@ -20,11 +20,12 @@ import type { ReadableStream as WebReadableStream } from 'stream/web';
  * still checked against the SHA-256 digest GitHub publishes for the asset.
  */
 
-const REPO = 'guhcostan/mac-cleaner-cli';
+const REPO = 'JandersonJean/disk-mac';
 const RELEASE_API = `https://api.github.com/repos/${REPO}/releases/latest`;
-export const APP_BUNDLE = 'Mac Cleaner.app';
-const APP_PROCESS = 'Mac Cleaner';
-const BUNDLE_ID = 'io.github.guhcostan.maccleaner';
+export const APP_BUNDLE = 'Disk Mac.app';
+const LEGACY_APP_BUNDLE = 'Mac Cleaner.app';
+const APP_PROCESSES = ['Disk Mac', 'Mac Cleaner'];
+const APP_BUNDLE_IDS = ['io.github.guhcostan.diskmac', 'io.github.guhcostan.maccleaner'];
 
 export type AppArch = 'arm64' | 'x64';
 
@@ -81,9 +82,9 @@ export const defaultDeps: AppInstallDeps = {
   run: defaultRun,
   log: (message) => console.log(message),
   home: homedir(),
-  githubToken: process.env.MAC_CLEANER_GITHUB_TOKEN || undefined,
+  githubToken: process.env.DISK_MAC_GITHUB_TOKEN || process.env.MAC_CLEANER_GITHUB_TOKEN || undefined,
   systemAppsDir: '/Applications',
-  makeTempDir: () => mkdtemp(join(tmpdir(), 'mac-cleaner-app-')),
+  makeTempDir: () => mkdtemp(join(tmpdir(), 'disk-mac-app-')),
 };
 
 /** Apple Silicon is detected through sysctl so a Node running under Rosetta still gets the arm64 app. */
@@ -96,12 +97,12 @@ export async function detectArch(deps: Pick<AppInstallDeps, 'run'>): Promise<App
   }
 }
 
-/** The zip of the app for this architecture, e.g. `Mac-Cleaner-1.4.0-arm64-mac.zip`. */
+/** The zip of the app for this architecture, e.g. `Disk-Mac-1.4.0-arm64-mac.zip`. */
 export function pickAsset(release: Release, arch: AppArch): ReleaseAsset {
-  const pattern = new RegExp(`^Mac-Cleaner-[0-9][0-9A-Za-z.+-]*-${arch}-mac\\.zip$`);
+  const pattern = new RegExp(`^Disk-Mac-[0-9][0-9A-Za-z.+-]*-${arch}-mac\\.zip$`);
   const asset = release.assets.find((a) => pattern.test(a.name));
   if (!asset) {
-    throw new Error(`Release ${release.tag_name} has no Mac Cleaner app for ${arch}.`);
+    throw new Error(`Release ${release.tag_name} has no Disk Mac app for ${arch}.`);
   }
   if (!asset.browser_download_url.startsWith('https://github.com/')) {
     throw new Error(`Unexpected download URL for ${asset.name}.`);
@@ -119,7 +120,7 @@ export function expectedSha256(asset: ReleaseAsset): string {
 }
 
 async function fetchLatestRelease(deps: AppInstallDeps): Promise<Release> {
-  const headers: Record<string, string> = { Accept: 'application/vnd.github+json', 'User-Agent': 'mac-cleaner-cli' };
+  const headers: Record<string, string> = { Accept: 'application/vnd.github+json', 'User-Agent': 'disk-mac-installer' };
   // Optional: avoids the unauthenticated API rate limit (60 requests/hour per IP), e.g. in CI.
   if (deps.githubToken) headers.Authorization = `Bearer ${deps.githubToken}`;
   const response = await deps.fetch(RELEASE_API, { headers });
@@ -135,7 +136,7 @@ async function fetchLatestRelease(deps: AppInstallDeps): Promise<Release> {
 
 /** Streams the asset to disk while hashing it; returns the SHA-256 hex digest. */
 async function download(url: string, destination: string, deps: AppInstallDeps): Promise<string> {
-  const response = await deps.fetch(url, { headers: { 'User-Agent': 'mac-cleaner-cli' } });
+  const response = await deps.fetch(url, { headers: { 'User-Agent': 'disk-mac-installer' } });
   if (!response.ok || !response.body) {
     throw new Error(`Download failed (HTTP ${response.status}).`);
   }
@@ -165,27 +166,44 @@ async function chooseInstallDir(options: AppInstallOptions, deps: AppInstallDeps
     await mkdir(options.dir, { recursive: true });
     return options.dir;
   }
-  if (await isWritableDir(deps.systemAppsDir)) {
-    return deps.systemAppsDir;
-  }
-  // Standard accounts can't write to /Applications; ~/Applications works the same for a single user.
   const userApps = join(deps.home, 'Applications');
+  // Keep updates beside an existing install, including the previous Mac Cleaner.app name.
+  for (const directory of [deps.systemAppsDir, userApps]) {
+    if (!(await isWritableDir(directory))) continue;
+    for (const bundle of [APP_BUNDLE, LEGACY_APP_BUNDLE]) {
+      if ((await stat(join(directory, bundle)).catch(() => null))?.isDirectory()) return directory;
+    }
+  }
+  if (await isWritableDir(deps.systemAppsDir)) return deps.systemAppsDir;
+  // Standard accounts can't write to /Applications; ~/Applications works the same for a single user.
   await mkdir(userApps, { recursive: true });
   return userApps;
 }
 
 /** Quits a running copy so its bundle can be replaced. */
 async function quitRunningApp(deps: AppInstallDeps): Promise<void> {
-  try {
-    await deps.run('/usr/bin/pgrep', ['-x', APP_PROCESS]);
-  } catch {
-    return; // not running
+  let running = false;
+  for (const processName of APP_PROCESSES) {
+    try {
+      await deps.run('/usr/bin/pgrep', ['-x', processName]);
+      running = true;
+      break;
+    } catch {
+      // Check the previous process name too while existing installs are being replaced.
+    }
   }
-  deps.log(chalk.dim('Quitting the running Mac Cleaner…'));
-  try {
-    await deps.run('/usr/bin/osascript', ['-e', `tell application id "${BUNDLE_ID}" to quit`]);
-  } catch {
-    // Already gone or not scriptable; replacing the bundle still works.
+  if (!running) return;
+  deps.log(chalk.dim('Quitting the running Disk Mac…'));
+  for (const bundleId of APP_BUNDLE_IDS) {
+    try {
+      // A previous Disk Mac build used the original Mac Cleaner identifier.
+      // Guard each identifier so updating never launches an inactive copy.
+      await deps.run('/usr/bin/osascript', ['-e',
+        `if application id "${bundleId}" is running then\n  tell application id "${bundleId}" to quit\nend if`,
+      ]);
+    } catch {
+      // This identifier may no longer be installed; still check the other one.
+    }
   }
 }
 
@@ -200,7 +218,7 @@ export async function installApp(
 
   const workDir = await deps.makeTempDir();
   try {
-    deps.log(`Downloading Mac Cleaner ${release.tag_name} (${arch === 'arm64' ? 'Apple Silicon' : 'Intel'})…`);
+    deps.log(`Downloading Disk Mac ${release.tag_name} (${arch === 'arm64' ? 'Apple Silicon' : 'Intel'})…`);
     const zipPath = join(workDir, asset.name);
     const actual = await download(asset.browser_download_url, zipPath, deps);
     if (actual !== expected) {
@@ -227,11 +245,12 @@ export async function installApp(
     await quitRunningApp(deps);
     await rm(appPath, { recursive: true, force: true });
     await rename(stagedApp, appPath);
+    await rm(join(installDir, LEGACY_APP_BUNDLE), { recursive: true, force: true });
     // Nothing should carry the attribute after a fetch download; clear it anyway so the
     // app never shows the Gatekeeper prompt.
     await deps.run('/usr/bin/xattr', ['-dr', 'com.apple.quarantine', appPath]).catch(() => undefined);
 
-    deps.log(chalk.green(`✓ Mac Cleaner ${release.tag_name} installed in ${installDir}`));
+    deps.log(chalk.green(`✓ Disk Mac ${release.tag_name} installed in ${installDir}`));
 
     if (options.open !== false) {
       await deps.run('/usr/bin/open', [appPath]);
@@ -246,7 +265,7 @@ export async function installApp(
 
 export async function appInstallCommand(options: AppInstallOptions): Promise<void> {
   if (process.platform !== 'darwin') {
-    throw new Error('The Mac Cleaner app only runs on macOS.');
+    throw new Error('Disk Mac only runs on macOS.');
   }
   await installApp(options);
 }

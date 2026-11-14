@@ -1,9 +1,11 @@
-import { lstat, readdir, rm, access, unlink } from 'fs/promises';
+import { physicalFs } from './physical-fs.js';
 import { join, resolve } from 'path';
 import { homedir } from 'os';
 import type { CleanableItem } from '../types.js';
 import { sanitizeDisplayName } from './display.js';
 import { debugError, errorCode, isExpectedFsError } from './errors.js';
+
+const { lstat, readdir, rm, access, unlink } = physicalFs;
 
 /**
  * System paths that should NEVER be deleted.

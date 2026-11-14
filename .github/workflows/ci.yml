@@ -17,7 +17,7 @@ jobs:
     
     strategy:
       matrix:
-        node-version: [20, 22, 24]
+        node-version: [22, 24]
 
     steps:
       - name: Checkout
@@ -45,7 +45,7 @@ jobs:
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v7
-        if: matrix.node-version == 20
+        if: matrix.node-version == 22
         with:
           files: ./coverage/lcov.info
           fail_ci_if_error: false
@@ -66,11 +66,22 @@ jobs:
       - name: Test app installers
         if: matrix.node-version == 22
         env:
-          MAC_CLEANER_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DISK_MAC_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          release=$(gh release list --repo "$GITHUB_REPOSITORY" --exclude-drafts --exclude-pre-releases --limit 1 --json tagName --jq '.[0].tagName // empty')
+          if [ -z "$release" ]; then
+            echo "No published desktop release to install yet."
+            exit 0
+          fi
+          assets=$(gh release view "$release" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')
+          if ! printf '%s\n' "$assets" | grep -Eq "^Disk-Mac-.*-$(uname -m | sed 's/x86_64/x64/')-mac\.zip$"; then
+            echo "Desktop archive for this runner is not available yet."
+            exit 0
+          fi
           check_app() {
-            app="$1/Mac Cleaner.app"
-            test -x "$app/Contents/MacOS/Mac Cleaner"
+            app="$1/Disk Mac.app"
+            test -x "$app/Contents/MacOS/Disk Mac"
             codesign --verify --deep --strict "$app"
             if xattr -p com.apple.quarantine "$app" 2>/dev/null; then
               echo "quarantine attribute is set on $app"; exit 1
@@ -81,38 +92,5 @@ jobs:
           node dist/index.mjs app install --no-open --dir "$RUNNER_TEMP/cli-apps"
           check_app "$RUNNER_TEMP/cli-apps"
 
-          MAC_CLEANER_NO_OPEN=1 MAC_CLEANER_INSTALL_DIR="$RUNNER_TEMP/script-apps" bash docs/install.sh
+          DISK_MAC_NO_OPEN=1 DISK_MAC_INSTALL_DIR="$RUNNER_TEMP/script-apps" bash docs/install.sh
           check_app "$RUNNER_TEMP/script-apps"
-
-  publish:
-    needs: test
-    runs-on: macos-latest
-    if: github.event_name == 'release'
-
-    permissions:
-      contents: read
-      id-token: write
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: 20
-          registry-url: 'https://registry.npmjs.org'
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Build
-        run: bun run build
-
-      - name: Publish to npm
-        run: npm publish --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

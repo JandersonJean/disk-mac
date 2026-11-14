@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="pt-BR">
   <head>
     <meta charset="utf-8" />
     <meta
@@ -7,23 +7,29 @@
       content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'"
     />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Mac Cleaner</title>
+    <title>Disk Mac</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <div id="app" class="app">
-      <header class="header">
+      <aside class="sidebar">
         <div class="brand">
           <img class="brand-mark" src="logo.png" alt="" />
-          <span class="brand-name">Mac Cleaner</span>
+          <span class="brand-name">Disk Mac</span>
         </div>
-        <nav class="tabs" role="tablist">
-          <button class="tab" role="tab" data-view="home">Home</button>
-          <button class="tab" role="tab" data-view="deep">Deep Clean</button>
-          <button class="tab" role="tab" data-view="history">History</button>
-          <button class="tab" role="tab" data-view="settings" aria-label="Settings">Settings</button>
+        <nav class="tabs" role="tablist" aria-label="Navegação principal">
+          <button class="tab" role="tab" data-view="home">Início</button>
+          <button class="tab" role="tab" data-view="activity">Monitor do sistema</button>
+          <button class="tab" role="tab" data-view="deep">Limpeza completa</button>
+          <button class="tab" role="tab" data-view="analyze">Analisar disco</button>
+          <button class="tab" role="tab" data-view="optimize">Otimizar</button>
+          <button class="tab" role="tab" data-view="uninstall">Desinstalar apps</button>
+          <button class="tab" role="tab" data-view="backups">Backups</button>
+          <button class="tab" role="tab" data-view="history">Histórico</button>
+          <button class="tab" role="tab" data-view="settings" aria-label="Ajustes">Ajustes</button>
         </nav>
-      </header>
+        <div class="sidebar-footer">Ferramentas para cuidar do seu Mac</div>
+      </aside>
       <main id="view" class="view"></main>
     </div>
     <script src="app.js"></script>
