@@ -1,14 +1,64 @@
-# Disk Mac
+<p align="center">
+  <img src="desktop/build/icon.png" width="112" alt="Ícone do Disk Mac">
+</p>
 
-Aplicativo para macOS com interface em português. Reúne limpeza de arquivos, desinstalação de aplicativos e pacotes Homebrew, análise de disco, rotinas de otimização, backups e monitoramento do sistema.
+<h1 align="center">Disk Mac</h1>
 
-Desenvolvido a partir do [mac-cleaner-cli de Gustavo Costa](https://github.com/guhcostan/mac-cleaner-cli), sob licença MIT. A CLI continua disponível no código deste repositório.
+<p align="center">
+  Limpe espaço, acompanhe o desempenho e cuide do seu Mac em um só app.
+</p>
 
-- **Monitor do sistema** com CPU, GPU, memória e rede a cada 500 ms enquanto visível, lista de processos e painel na barra de menus.
-- **Limpeza e backup** com revisão dos itens e restauração de cópias compatíveis.
-- **Análise de disco** com mapa de uso, navegação por pastas e envio à Lixeira após revisão.
+<p align="center">
+  <a href="#o-que-você-pode-fazer">Recursos</a> ·
+  <a href="#barra-de-menus">Barra de menus</a> ·
+  <a href="#começar">Começar</a> ·
+  <a href="#linha-de-comando">CLI</a>
+</p>
 
-No macOS, use Node.js 22.18+ ou 24.11+ e Bun para executar a partir do código.
+O **Disk Mac** é um app para macOS com interface em português do Brasil e modos claro e escuro. Nasceu como um fork de [mac-cleaner-cli](https://github.com/guhcostan/mac-cleaner-cli), de Gustavo Costa, e foi remodelado em torno do app desktop. Ele mantém a CLI e reaproveita suas rotinas de limpeza, com nova identidade visual, navegação própria e ferramentas para analisar o armazenamento, monitorar processos e gerenciar backups.
+
+![Tela do Monitor do sistema do Disk Mac em modo escuro, com gráficos de CPU, GPU, memória e rede e indicadores de disco, swap e bateria](assets/screenshots/disk-mac-monitor.jpg)
+
+*As capturas mostram a interface atual com dados de demonstração.*
+
+## O que você pode fazer
+
+| Tela | Para que serve |
+| --- | --- |
+| **Monitor do sistema** | Acompanhe CPU, memória, rede, disco, swap, bateria e GPU quando o driver disponibilizar a leitura. Pesquise processos por nome, usuário ou PID, ordene por consumo e finalize processos do seu usuário quando permitido. |
+| **Limpeza completa** | Veja uma prévia do que a limpeza encontrou e escolha as categorias a remover. Você também pode executar uma limpeza rápida ou agendar as categorias compatíveis em **Ajustes** e consultar as execuções no **Histórico**. |
+| **Analisar disco** | Abra uma pasta ou volume, explore o mapa de espaço, encontre os maiores arquivos e revise o que deseja mover para a Lixeira. |
+| **Otimizar** | Reúne as rotinas de manutenção em uma tela, com ações para Quick Look, DNS, Spotlight e verificação de volume, entre outras. Selecione as rotinas e acompanhe o resultado de cada uma. |
+| **Desinstalar apps** | Remova aplicativos `.app` e pacotes do Homebrew, incluindo fórmulas e casks. Revise os arquivos relacionados encontrados antes de removê-los. Instaladores `.pkg` podem exigir o desinstalador do fornecedor. |
+| **Backups** | Guarde itens compatíveis antes da limpeza, veja arquivos e conflitos antes de restaurar e revise as cópias vencidas. A aba **Time Machine** permite consultar os snapshots locais. |
+
+Os gráficos do monitor mostram os últimos dois minutos. Com o monitor visível, o intervalo alvo para ler CPU, GPU, memória e rede é de **500 ms**. A lista de processos tem uma coleta separada, a cada **2 s**. Para encerrar um processo, selecione-o e escolha **Finalizar processo…**. O encerramento forçado exige uma confirmação adicional.
+
+### Barra de menus
+
+<p>
+  <img src="assets/screenshots/disk-mac-barra-de-menus.jpg" width="300" alt="Painel compacto do Disk Mac com indicadores do sistema e botão para abrir o monitor completo">
+</p>
+
+Em **Ajustes**, ative **Monitor do sistema na barra de menus**. O ícone em forma de linha abre um painel compacto com indicadores do Mac e os processos que mais usam CPU. Ao lado do ícone, você pode exibir o uso de **CPU** ou **memória**, a taxa de **download** ou **upload**, ou deixar o valor oculto.
+
+Fechar a janela mantém o Disk Mac na barra de menus. Com o monitor e o painel fechados, o app atualiza apenas a métrica escolhida, a cada **5 s**. A opção **Oculto** pausa essa coleta. Para sair de vez, use **Encerrar Disk Mac** no menu do ícone ou `⌘Q` na janela principal.
+
+### Análise de disco e backups
+
+![Mapa de espaço da pasta Downloads no Disk Mac, com blocos proporcionais ao tamanho de cada item](assets/screenshots/disk-mac-analisar.jpg)
+
+O mapa ajuda a encontrar o que ocupa espaço e a explorar as subpastas. Em volumes APFS, arquivos podem compartilhar espaço, então o tamanho medido pode ser diferente do espaço que a remoção libera.
+
+![Tela Backups e restauração do Disk Mac, com abas para as cópias locais e o Time Machine, total armazenado e prazo de retenção](assets/screenshots/disk-mac-backups.jpg)
+
+As cópias do Disk Mac continuam ocupando espaço e preservam o arquivo existente em caso de conflito na restauração. Para proteger o Mac inteiro, use o Time Machine.
+
+## Começar
+
+Se houver um pacote publicado em [Releases](https://github.com/JandersonJean/disk-mac/releases), baixe o `.dmg` para seu Mac: **arm64** para Apple Silicon ou **x64** para Intel. Abra a imagem e arraste o Disk Mac para **Aplicativos**.
+
+Para rodar a partir do código no macOS, use **Bun** e **Node.js 22.18+ ou 24.11+**:
 
 ```bash
 git clone https://github.com/JandersonJean/disk-mac.git
@@ -19,341 +69,25 @@ bun install --frozen-lockfile
 bun run start
 ```
 
-Veja os [detalhes do desktop](desktop/README.md), os [releases do Disk Mac](https://github.com/JandersonJean/disk-mac/releases) e o [estado do projeto](AGENTS.md).
+Para gerar um instalador local, execute `bun run dist` dentro de `desktop/`. Os arquivos `.dmg` e `.zip` são gerados em `desktop/release/`. Veja a [documentação do desktop](desktop/README.md) para detalhes de compilação e empacotamento.
 
----
+O macOS protege algumas pastas. Para incluí-las nas leituras, autorize o Disk Mac em **Ajustes do Sistema → Privacidade e Segurança → Acesso Total ao Disco**. Ações que exigem administrador pedem autorização pelo próprio macOS.
 
-## ⚡ Quick Start
+## Linha de comando
 
-```bash
-bun run dev
-```
-
-With the root project's dependencies installed, the CLI will:
-
-1. 🔍 **Scan** your Mac for cleanable files
-2. 📋 **Show** you what was found with sizes
-3. ✅ **Let you select** exactly what to clean
-4. 🗑️ **Clean** only what you chose
-
-## 🖥️ Desktop App (menu bar) — new
-
-Prefer not to open a terminal? **Disk Mac** is a menu bar app built on the same scanners as the CLI.
-
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/app-dark.png">
-    <img src="assets/screenshots/app-light.png" alt="Disk Mac menu bar app: space freed, disk usage, last run and next automatic clean" width="620">
-  </picture>
-</p>
-
-- 🧹 **Cleans automatically every day** at the time you pick (temp files, browser cache, logs — you choose). If your Mac was asleep, it catches up when it wakes.
-- ⚡ **Clean Now** from the menu bar whenever you want
-- 🔥 **Deep Clean (hard delete)** — scan many more places, review the biggest items per category and permanently delete only what you tick, after a confirmation
-- 📊 **History** of every run with the space freed per category, plus a notification after each automatic clean
-- 🛡️ Risky categories are never cleaned unattended, and recently used temp files are left alone
-
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/screenshots/app-tour-dark.png">
-    <img src="assets/screenshots/app-tour-light.png" alt="Deep Clean asking to confirm a hard delete, the History of runs, and the Settings with the daily schedule" width="100%">
-  </picture>
-</p>
-
-The fork's installers use [Disk Mac Releases](https://github.com/JandersonJean/disk-mac/releases) after matching archives are published. To run the app from source, follow the build instructions above.
-
-## 🎬 The CLI In Action
-
-<p align="center">
-  <img src="assets/demo.gif" alt="mac-cleaner-cli demo" width="100%">
-</p>
-
-## ✨ Features
-
-| Feature | Description |
-|---------|-------------|
-| 🚀 **One Command** | Just run `bun run dev`  after installing the project dependencies |
-| 🎯 **Interactive** | Select exactly what you want to clean with checkboxes |
-| 📁 **File Explorer** | Drill down (`→`) into categories to select specific folders/files |
-| 🛡️ **Safe by Default** | Risky items hidden unless you use `--risky` |
-| 👀 **Dry Run** | Preview exactly what would be deleted with `--dry-run` |
-| ♻️ **Optional Backups** | Move items to a backup folder instead of deleting, restore later |
-| 🤖 **Scriptable** | `scan --json` and `clean --categories … --yes` for cron and CI |
-| 🖥️ **Menu Bar App** | Daily automatic cleaning, Deep Clean and history — `bun run dev app install` |
-| 🔍 **Smart Scanning** | Finds caches, logs, dev files, browser data, and more |
-| 📱 **App Uninstaller** | Remove apps completely with all associated files |
-| 🔧 **Maintenance** | Flush DNS cache, free purgeable space |
-| 🔒 **Privacy First** | 100% offline — no data ever leaves your machine |
-| 📦 **Minimal Dependencies** | Only 5 runtime deps, all from trusted maintainers |
-
-## 💰 vs. Paid Alternatives
-
-| | Mac Cleaner CLI | CleanMyMac X | DaisyDisk |
-|---|---|---|---|
-| **Price** | **Free** | $39.95/year | $9.99 one-time |
-| **Open Source** | ✅ | ❌ | ❌ |
-| **Telemetry / Analytics** | ❌ None | ⚠️ Yes | ⚠️ Yes |
-| **Works via terminal** | ✅ | ❌ | ❌ |
-| **Menu bar app** | ✅ | ✅ | ❌ |
-| **Automatic daily cleaning** | ✅ | ✅ | ❌ |
-| **CI/CD friendly** | ✅ | ❌ | ❌ |
-| **Customizable** | ✅ Fork it | ❌ | ❌ |
-| **App Uninstaller** | ✅ | ✅ | ❌ |
-| **File-level selection** | ✅ | ✅ | ✅ |
-
-## 🎯 What It Cleans
-
-### 🟢 Safe (always safe to delete)
-
-| Category | What it cleans |
-|----------|---------------|
-| `trash` | Files in the Trash bin |
-| `temp-files` | Temporary files in /tmp and /var/folders |
-| `browser-cache` | Chrome, Safari, Firefox, Arc cache |
-
-### 🟡 Moderate (generally safe)
-
-| Category | What it cleans |
-|----------|---------------|
-| `system-cache` | Application caches in ~/Library/Caches |
-| `system-logs` | System and application logs |
-| `dev-cache` | npm, yarn, pip, Xcode DerivedData, CocoaPods |
-| `node-modules` | Orphaned node_modules in old projects |
-| `homebrew` | Homebrew download cache **and old formula versions** (`brew cleanup --prune=all`) |
-| `docker` | Unused images, stopped containers, build cache — **only the types you select** |
-
-> `docker` and `homebrew` are **not** "safe": their cleanup is performed by the
-> external tool, and it removes more than downloaded files. Docker removes images
-> that aren't used by a *running* container (they must be pulled or rebuilt
-> again), and Homebrew removes old formula versions. Docker **volumes are never
-> touched** — that's your data, not cache.
-
-### 🔴 Risky (use `--risky` flag)
-
-| Category | What it cleans |
-|----------|---------------|
-| `downloads` | Downloads older than 30 days |
-| `ios-backups` | iPhone and iPad backup files |
-| `mail-attachments` | Downloaded email attachments |
-| `duplicates` | Duplicate files (keeps newest) |
-| `large-files` | Files larger than 500MB |
-| `language-files` | Unused language localizations — **breaks the app's code signature** |
-| `git-worktrees` | Stale or orphaned git worktrees (agents, feature checkouts) |
-
-## 📖 Usage
-
-### Basic Usage
+O projeto mantém a CLI original, `mac-cleaner-cli`. Depois de instalar as dependências na raiz, execute:
 
 ```bash
-# Interactive mode — scan, select, and clean
-bun run dev
-
-# Include risky categories
-bun run dev --risky
-
-# Preview what would be deleted, without deleting anything
-bun run dev --dry-run
-
-# Enable file picker for all categories
-bun run dev --risky -f
-```
-
-### Folder-Level Selection (Interactive)
-
-In interactive mode, press `→` on supported categories to drill into specific folders/files:
-
-- `↑↓` navigate • `←` back • `→` enter • `space` select • `a` all • `i` invert • `⏎` submit
-
-Supported categories: User Cache Files, Temporary Files, System Log Files, Development Cache, Browser Cache, Homebrew Cache.
-
-### Scripting & Automation (non-interactive)
-
-```bash
-# Scan only — see what can be cleaned without deleting anything
-bun run dev scan
-
-# Machine-readable output for scripts and integrations
-bun run dev scan --json
-bun run dev scan --json --verbose   # include item paths
-
-# Clean specific categories without prompts (great for cron/CI)
-bun run dev clean --categories trash,browser-cache,homebrew --yes
-
-# Preview first
-bun run dev clean --categories dev-cache --dry-run
-
-# Clean everything that is safe, no selection UI
-bun run dev clean --all --yes
-```
-
-Risky categories (downloads, iOS backups, etc) are always skipped unless you pass `--unsafe`.
-
-### Uninstall Apps
-
-Remove applications completely with all their preferences, caches, and support files:
-
-```bash
-bun run dev uninstall
-```
-
-### Maintenance Tasks
-
-```bash
-# Flush DNS cache (may require sudo)
-bun run dev maintenance --dns
-
-# Free purgeable space
-bun run dev maintenance --purgeable
-
-# Delete Time Machine local snapshots (requires sudo, asks for confirmation)
-sudo bun run dev maintenance --timemachine
-
-# Preview it first, or skip the prompt
-bun run dev maintenance --timemachine --dry-run
-sudo bun run dev maintenance --timemachine --yes
-```
-
-Local snapshots are taken automatically by Time Machine and can grow to hundreds of gigabytes.
-Deleting them is irreversible — they are your only local rollback point while the backup disk is
-disconnected — but macOS recreates them as needed once it is reconnected.
-
-### Other Commands
-
-```bash
-# List all available categories
+bun run dev --help
 bun run dev categories
-
-# Manage configuration
-bun run dev config --init
-bun run dev config --show
-
-# Manage backups
-bun run dev backup --list
-bun run dev backup --restore <dir>
-bun run dev backup --clean
-
-# Install or update the menu bar app (--no-open, --dir <folder>)
-bun run dev app install
+bun run dev scan --json
+bun run dev clean --categories browser-cache,system-logs --dry-run
 ```
 
-### Backups (opt-in)
+`scan` só faz a leitura e `--dry-run` mostra o que seria limpo sem remover arquivos. A CLI também oferece os comandos `uninstall`, `maintenance`, `config` e `backup`. Use `--help` depois do nome de um comando para ver suas opções. Para compilar a CLI, execute `bun run build` na raiz. Você poderá chamar o resultado com `node dist/index.mjs`.
 
-By default, cleaning is **permanent**: files are removed with `rm -rf` and do
-**not** go to the Trash.
+## Créditos e licença
 
-You can opt into backups by setting `backupEnabled` in `~/.maccleanerrc`:
+O Disk Mac preserva o histórico e a licença [MIT](LICENSE) do projeto original, [guhcostan/mac-cleaner-cli](https://github.com/guhcostan/mac-cleaner-cli). O monitor se inspira no Monitor de Atividade do macOS. **Otimizar** e **Analisar disco** se inspiram nos fluxos do [Mole](https://github.com/tw93/Mole), com implementação própria em TypeScript. O Disk Mac funciona sem instalar o Mole.
 
-```json
-{ "backupEnabled": true }
-```
-
-With backups on, selected items are **moved** to `~/.mac-cleaner-cli/backup/<timestamp>/`
-instead of being deleted, and can be brought back with `backup --restore`.
-
-Two honest caveats:
-
-- **Moving does not free disk space.** The files still occupy the same volume.
-  Space is only reclaimed by `backup --clean`, which deletes backups older than
-  7 days permanently.
-- **Docker and Homebrew cannot be backed up.** Their cleanup is performed by the
-  external tool (`docker system prune`, `brew cleanup`), so there is no file for
-  us to move. The CLI warns you before proceeding when these are selected.
-
-If a backup fails, the item is **not** deleted — it stays where it is and the
-failure is reported.
-
-### Flags
-
-```bash
--V, --version          Show version number
--h, --help             Show help
--r, --risky            Include risky categories
--d, --dry-run          Show what would be deleted, delete nothing
--f, --file-picker      Force file picker for ALL categories
--A, --absolute-paths   Show absolute paths
-    --no-progress      Disable progress bars
-```
-
-### Troubleshooting
-
-Scans tolerate unreadable paths (missing Full Disk Access, permission errors), so a
-category can come back empty without an obvious reason. Set `MAC_CLEANER_DEBUG=1` to
-print every skipped path and the underlying error:
-
-```bash
-MAC_CLEANER_DEBUG=1 bun run dev scan
-```
-
-Exit codes: `0` on success, `1` when a category could not be scanned or an item could
-not be deleted. `scan --json` also reports failures in an `errors` array.
-
-## 🔒 Security
-
-| | |
-|---|---|
-| ✅ **Open Source** | All code publicly available for audit |
-| **Local operations** | Scans and monitoring run locally. Release installers contact GitHub. |
-| **Permissions** | Most operations run as the current user. Some maintenance routines ask for macOS authorization. |
-| ✅ **Minimal Deps** | Only 5 runtime dependencies |
-| **CI** | GitHub Actions runs TypeScript, ESLint and automated tests |
-| ✅ **Socket.dev** | Dependencies monitored for supply chain attacks |
-
-Found a vulnerability? Report it via [GitHub Security Advisories](https://github.com/JandersonJean/disk-mac/security/advisories/new).
-
-## 🛠️ Development
-
-```bash
-git clone https://github.com/JandersonJean/disk-mac.git
-cd disk-mac
-bun install
-bun run dev      # Run in dev mode
-bun run test     # Run tests
-bun run lint     # Run linter
-bun run build    # Build for production
-```
-
-Desktop app (Electron, lives in [`desktop/`](desktop/README.md)):
-
-```bash
-cd desktop
-bun install
-bun run start    # Build and launch the menu bar app
-bun run test     # Run desktop tests
-bun run dist     # Package .dmg/.zip into desktop/release (macOS only)
-bun run screenshots  # Regenerate the README screenshots with sample data (needs Playwright)
-```
-
-## 🤝 Contributing
-
-Contributions are very welcome! Whether it's a new scanner, a bug fix, or a documentation improvement — we'd love your help.
-
-**Read the full guide:** [CONTRIBUTING.md](CONTRIBUTING.md)
-
-Quick steps:
-1. Fork the repo
-2. Create your branch: `git checkout -b feat/my-feature`
-3. Make your changes and add tests
-4. Run `bun run lint && bun run test`
-5. Open a Pull Request
-
-Looking for a place to start? Check issues labeled [`good first issue`](https://github.com/JandersonJean/disk-mac/labels/good%20first%20issue) or [`help wanted`](https://github.com/JandersonJean/disk-mac/labels/help%20wanted).
-
-## 💬 Community
-
-- [GitHub Discussions](https://github.com/JandersonJean/disk-mac/discussions) — questions, ideas, show & tell
-- [Issues](https://github.com/JandersonJean/disk-mac/issues) — bug reports and feature requests
-
-## 📄 License
-
-MIT License — see [LICENSE](LICENSE) for details.
-
----
-
-<p align="center">
-  <strong>⚠️ Disclaimer</strong><br>
-  This tool deletes files from your system. While we've implemented safety measures, always ensure you have backups of important data.
-</p>
-
-<p align="center">
-  Made with ❤️ for Mac users everywhere
-</p>
+Para colaborar, consulte o [guia de contribuição](CONTRIBUTING.md) e as [orientações do projeto](AGENTS.md). Use as [Issues do Disk Mac](https://github.com/JandersonJean/disk-mac/issues) para reportar um problema ou sugerir uma melhoria. Para vulnerabilidades, consulte a [política de segurança](SECURITY.md).

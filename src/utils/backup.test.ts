@@ -1,21 +1,38 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { mkdir, mkdtemp, rm, writeFile, readFile } from 'fs/promises';
+import { cp, link, mkdir, mkdtemp, readFile, readlink, rename, rm, symlink, utimes, writeFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join } from 'path';
 import { tmpdir, homedir } from 'os';
 import * as backup from './backup.js';
 
+const { fixtureHome } = await vi.hoisted(async () => {
+  const { mkdtempSync, realpathSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  return { fixtureHome: mkdtempSync(join(realpathSync(tmpdir()), 'disk-mac-backup-home-')) };
+});
+
+vi.mock('os', async (importOriginal) => ({
+  ...await importOriginal<typeof import('os')>(),
+  homedir: () => fixtureHome,
+}));
+
+vi.mock('fs/promises', async (importOriginal) => {
+  const fs = await importOriginal<typeof import('fs/promises')>();
+  return { ...fs, rename: vi.fn(fs.rename), cp: vi.fn(fs.cp), link: vi.fn(fs.link) };
+});
+
+beforeEach(async () => {
+  await mkdir(fixtureHome, { recursive: true });
+});
+
+afterEach(async () => {
+  vi.resetAllMocks();
+  vi.restoreAllMocks();
+  await rm(fixtureHome, { recursive: true, force: true });
+});
+
 describe('backup utilities', () => {
-  const testBackupDir = join(tmpdir(), 'mac-cleaner-backup-test-' + Date.now());
-
-  beforeEach(async () => {
-    await mkdir(testBackupDir, { recursive: true });
-  });
-
-  afterEach(async () => {
-    await rm(testBackupDir, { recursive: true, force: true });
-  });
-
   describe('ensureBackupDir', () => {
     it('should create backup directory', async () => {
       const dir = await backup.ensureBackupDir();
@@ -34,16 +51,49 @@ describe('backup utilities', () => {
   });
 
   describe('listBackups', () => {
-    it('should list backups', async () => {
-      const backups = await backup.listBackups();
-      expect(Array.isArray(backups)).toBe(true);
+    it('lists sessions newest first and counts files in subdirectories', async () => {
+      const older = await backup.ensureBackupDir();
+      const newer = await backup.ensureBackupDir();
+      const nested = join(older, 'HOME', 'Documents');
+      await mkdir(nested, { recursive: true });
+      await writeFile(join(nested, 'notes.txt'), 'notes');
+      await symlink('notes.txt', join(nested, 'alias'));
+      await writeFile(join(newer, 'report.txt'), 'report');
+      await writeFile(join(backup.getBackupDir(), 'not-a-session'), 'ignore');
+      const oldDate = new Date('2025-01-01T00:00:00Z');
+      const newDate = new Date('2025-01-02T00:00:00Z');
+      await utimes(older, oldDate, oldDate);
+      await utimes(newer, newDate, newDate);
+
+      expect(await backup.listBackups()).toEqual([
+        { path: newer, date: newDate, size: 6 },
+        { path: older, date: oldDate, size: 5 },
+      ]);
+    });
+
+    it('returns an empty list before the first backup', async () => {
+      expect(await backup.listBackups()).toEqual([]);
     });
   });
 
   describe('cleanOldBackups', () => {
-    it('should clean old backups', async () => {
-      const cleaned = await backup.cleanOldBackups();
-      expect(typeof cleaned).toBe('number');
+    it('cleans expired sessions and preserves recent sessions and stray files', async () => {
+      const expired = await backup.ensureBackupDir();
+      const recent = await backup.ensureBackupDir();
+      const stray = join(backup.getBackupDir(), 'stray.txt');
+      await writeFile(stray, 'keep');
+      const oldDate = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000);
+      await utimes(expired, oldDate, oldDate);
+      await utimes(stray, oldDate, oldDate);
+
+      expect(await backup.cleanOldBackups(2)).toBe(1);
+      expect(existsSync(expired)).toBe(false);
+      expect(existsSync(recent)).toBe(true);
+      expect(await readFile(stray, 'utf-8')).toBe('keep');
+    });
+
+    it('has nothing to clean before the first backup', async () => {
+      expect(await backup.cleanOldBackups()).toBe(0);
     });
   });
 
@@ -246,38 +296,111 @@ describe('backup utilities', () => {
       await rm(invalidDir, { recursive: true, force: true });
     });
 
-    it('should return errors array in result', async () => {
-      const backupDir = backup.getBackupDir();
-      const testDir = join(backupDir, 'error-test-' + Date.now());
-      await mkdir(testDir, { recursive: true });
+    it('restores unaffected files and preserves both versions on conflict', async () => {
+      const dir = await backup.ensureBackupDir();
+      const documents = join(fixtureHome, 'Documents');
+      const saved = join(dir, 'HOME', 'Documents');
+      await mkdir(documents);
+      await mkdir(saved, { recursive: true });
+      await writeFile(join(documents, 'report.txt'), 'current');
+      await writeFile(join(saved, 'report.txt'), 'original');
+      await writeFile(join(saved, 'notes.txt'), 'notes');
 
-      const result = await backup.restoreBackup(testDir);
+      const result = await backup.restoreBackup(dir);
 
-      expect(result).toHaveProperty('errors');
-      expect(Array.isArray(result.errors)).toBe(true);
+      expect(result).toMatchObject({ success: 1, failed: 1, errors: [expect.stringContaining('Arquivo existente preservado')] });
+      expect(await readFile(join(documents, 'report.txt'), 'utf-8')).toBe('current');
+      expect(await readFile(join(saved, 'report.txt'), 'utf-8')).toBe('original');
+      expect(await readFile(join(documents, 'notes.txt'), 'utf-8')).toBe('notes');
+      expect(existsSync(join(saved, 'notes.txt'))).toBe(false);
 
-      await rm(testDir, { recursive: true, force: true });
+      await rm(join(documents, 'report.txt'));
+      expect(await backup.restoreBackup(dir)).toEqual({ success: 1, failed: 0, errors: [] });
+      expect(await readFile(join(documents, 'report.txt'), 'utf-8')).toBe('original');
+      expect(existsSync(dir)).toBe(false);
     });
 
-    it('should skip files with path traversal patterns', async () => {
-      const backupDir = backup.getBackupDir();
-      const testDir = join(backupDir, 'traversal-test-' + Date.now());
-      const homeSubdir = join(testDir, 'HOME');
-      await mkdir(homeSubdir, { recursive: true });
-      
-      // Create a file that would try to escape (the restore should skip it)
-      // Note: We can't actually test path traversal without crafting malicious paths,
-      // but we can verify the structure is handled correctly
-      await writeFile(join(homeSubdir, 'safe-file.txt'), 'safe content');
+    it('refuses to use a symlink as a backup session', async () => {
+      const dir = await backup.ensureBackupDir();
+      const data = join(dir, 'HOME');
+      await mkdir(data);
+      await writeFile(join(data, 'notes.txt'), 'still backed up');
+      const alias = join(backup.getBackupDir(), 'redirected-session');
+      await symlink(dir, alias);
 
-      const result = await backup.restoreBackup(testDir);
+      expect(await backup.restoreBackup(alias)).toMatchObject({ success: 0, failed: 1 });
+      expect(existsSync(join(fixtureHome, 'notes.txt'))).toBe(false);
+      expect(await readFile(join(data, 'notes.txt'), 'utf-8')).toBe('still backed up');
+    });
 
-      // The restore should process files under HOME structure
-      expect(result).toHaveProperty('success');
-      expect(result).toHaveProperty('failed');
-      expect(result).toHaveProperty('errors');
+    it('does not redirect restoration through a symlink to a directory outside the home', async () => {
+      const outside = await mkdtemp(join(tmpdir(), 'disk-mac-restore-outside-'));
+      try {
+        const dir = await backup.ensureBackupDir();
+        const saved = join(dir, 'HOME', 'redirect', 'subdir');
+        await mkdir(saved, { recursive: true });
+        await writeFile(join(saved, 'notes.txt'), 'retained');
+        await symlink(outside, join(fixtureHome, 'redirect'));
 
-      await rm(testDir, { recursive: true, force: true });
+        const result = await backup.restoreBackup(dir);
+
+        expect(result).toMatchObject({ success: 0, failed: 1, errors: [expect.stringContaining('outside home')] });
+        expect(existsSync(join(outside, 'subdir'))).toBe(false);
+        expect(await readFile(join(saved, 'notes.txt'), 'utf-8')).toBe('retained');
+      } finally {
+        await rm(outside, { recursive: true, force: true });
+      }
+    });
+
+    it('restores symlinks as links and copies regular files when hard links cross volumes', async () => {
+      const dir = await backup.ensureBackupDir();
+      const saved = join(dir, 'HOME', 'Documents');
+      await mkdir(saved, { recursive: true });
+      await writeFile(join(saved, 'original.txt'), 'example');
+      await symlink('original.txt', join(saved, 'alias'));
+      vi.mocked(link).mockRejectedValueOnce(Object.assign(new Error('Cross-device link'), { code: 'EXDEV' }));
+
+      expect(await backup.restoreBackup(dir)).toEqual({ success: 2, failed: 0, errors: [] });
+      expect(await readlink(join(fixtureHome, 'Documents', 'alias'))).toBe('original.txt');
+      expect(await readFile(join(fixtureHome, 'Documents', 'alias'), 'utf-8')).toBe('example');
+      expect(existsSync(dir)).toBe(false);
+    });
+
+    it('leaves content outside the HOME structure in the backup', async () => {
+      const dir = await backup.ensureBackupDir();
+      const strayFile = join(dir, 'stray.txt');
+      await writeFile(strayFile, 'unexpected');
+
+      expect(await backup.restoreBackup(dir)).toMatchObject({
+        success: 0, failed: 1, errors: [expect.stringContaining('outside HOME structure')],
+      });
+      expect(await readFile(strayFile, 'utf-8')).toBe('unexpected');
+      expect(existsSync(join(fixtureHome, 'stray.txt'))).toBe(false);
+    });
+  });
+
+  describe('backupItem across volumes', () => {
+    it('keeps the source when the cross-volume backup copy fails', async () => {
+      const dir = await backup.ensureBackupDir();
+      const file = join(fixtureHome, 'original.txt');
+      await writeFile(file, 'original');
+      vi.mocked(rename).mockRejectedValueOnce(Object.assign(new Error('Cross-device rename'), { code: 'EXDEV' }));
+      vi.mocked(cp).mockRejectedValueOnce(Object.assign(new Error('No space left'), { code: 'ENOSPC' }));
+
+      expect(await backup.backupItem({ path: file, name: 'original.txt', size: 8, isDirectory: false }, dir)).toBe(false);
+      expect(await readFile(file, 'utf-8')).toBe('original');
+      expect(existsSync(join(dir, 'HOME', 'original.txt'))).toBe(false);
+    });
+
+    it('completes a cross-volume backup by copying before removing the source', async () => {
+      const dir = await backup.ensureBackupDir();
+      const file = join(fixtureHome, 'original.txt');
+      await writeFile(file, 'original');
+      vi.mocked(rename).mockRejectedValueOnce(Object.assign(new Error('Cross-device rename'), { code: 'EXDEV' }));
+
+      expect(await backup.backupItem({ path: file, name: 'original.txt', size: 8, isDirectory: false }, dir)).toBe(true);
+      expect(await readFile(join(dir, 'HOME', 'original.txt'), 'utf-8')).toBe('original');
+      expect(existsSync(file)).toBe(false);
     });
   });
 });

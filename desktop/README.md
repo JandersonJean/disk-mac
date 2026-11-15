@@ -1,17 +1,14 @@
 # Disk Mac — aplicativo desktop
 
 A macOS desktop app in Brazilian Portuguese, with a menu bar shortcut. It reuses the
-scanners and maintenance routines from [`mac-cleaner-cli`](../README.md), and shares the
+scanners and maintenance routines from [`mac-cleaner-cli`](https://github.com/guhcostan/mac-cleaner-cli), and shares the
 CLI's backup configuration.
 
 <p align="center"><img src="build/icon.png" width="96" alt="Ícone do Disk Mac"></p>
 
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="../assets/screenshots/app-tour-dark.png">
-    <img src="../assets/screenshots/app-tour-light.png" alt="Limpeza completa, histórico e ajustes do Disk Mac" width="100%">
-  </picture>
-</p>
+![Monitor do sistema do Disk Mac com gráficos de CPU, GPU, memória e rede](../assets/screenshots/disk-mac-monitor.jpg)
+
+*Captura da interface atual com dados de demonstração.*
 
 ## What it does
 
